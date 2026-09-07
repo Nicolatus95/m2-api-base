@@ -1,12 +1,16 @@
 """Rutas HTTP del recurso `reports`."""
-import tempfile
+from fastapi import APIRouter, Header, Query, status
+from pydantic import BaseModel
 
-from fastapi import APIRouter, Query, status
-
+from core import errors
 from reports import export, service
 from reports.schemas import Report, ReportCreate
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+class ExportResult(BaseModel):
+    filename: str
 
 
 @router.get("", response_model=list[Report])
@@ -14,15 +18,19 @@ def list_reports(user_id: int | None = Query(default=None)) -> list[Report]:
     return service.list_reports(user_id=user_id)
 
 
-@router.get("/export")
-def export_reports(fmt: str = "csv", dest: str = tempfile.gettempdir(), token: str = ""):
-    if not export.check_token(token):
-        return {"error": "token invalido"}
-    try:
-        ruta = export.export_to_disk(fmt, dest)
-    except Exception:
-        return {"error": "fallo la exportacion"}
-    return {"ruta": ruta}
+@router.get("/export", response_model=ExportResult, summary="Exporta los reportes a un archivo")
+def export_reports(
+    fmt: str = Query(default="csv"),
+    x_export_token: str = Header(default=""),
+) -> ExportResult:
+    """Genera un archivo de exportación en el directorio del servidor.
+
+    Requiere la cabecera ``X-Export-Token``. Devuelve solo el nombre del archivo
+    generado, nunca su ruta completa.
+    """
+    if not export.check_token(x_export_token):
+        raise errors.unauthorized("token de exportación inválido")
+    return ExportResult(filename=export.export_to_file(fmt))
 
 
 @router.get("/{report_id}", response_model=Report)

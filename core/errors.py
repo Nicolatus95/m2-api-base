@@ -29,3 +29,11 @@ def already_exists(resource: str, identifier: object) -> HTTPException:
         status_code=status.HTTP_409_CONFLICT,
         detail=f"{resource} ya existe: {identifier}",
     )
+
+
+def unauthorized(message: str = "no autorizado") -> HTTPException:
+    """401 — falta autenticación o es inválida."""
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=message,
+    )
