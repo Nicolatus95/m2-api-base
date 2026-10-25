@@ -901,3 +901,98 @@ Esta clasificación vale solo para Python 3.14. Aquí las anotaciones de funció
 Pydantic envuelve el validador por sí mismo cuando el primer parámetro se llama `cls`. Lo verifiqué: sin `@classmet
 
 [… respuesta recortada …]
+
+---
+
+## 2026-10-24 23:27:23 · Prompt
+
+```text
+<pasted_content id="d10f">
+Decisiones sobre los sobrevivientes:
+
+- Grupo 3: corrige el diseño, no agregues un test. Haz que tasks/repository.py
+  llame a reset() al final del módulo, igual que users/repository.py, sin dejar
+  el estado inicial duplicado (que el valor inicial viva solo en reset()).
+- Grupo 4: agrega un unitario del repositorio que cree tareas con ids grandes
+  generados en tiempo de ejecución (int("1000")) y verifique el filtro por
+  assignee_id. Docstring "Unitario (CA-38)".
+- Grupo 1: filtra de la sesión los mutantes que reemplazan el operador | (en
+  tasks/ todos los | son anotaciones de tipo). Documenta el motivo en
+  cosmic-ray.toml o donde corresponda según la herramienta.
+- Grupo 2: no lo toques; queda como equivalente documentado.
+
+Después corre pytest --cov=. --cov-report=term-missing --tb=no -rN y ruff check .,
+vuelve a ejecutar la sesión de mutación desde cero y muéstrame el reporte final.
+Detente ahí.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 23:28:52 · Respuesta
+
+Primero reviso cómo configura Cosmic Ray el filtro de operadores en esta versión.
+
+La configuración usa la sección `[cosmic-ray.filters.operators-filter]` con expresiones regulares. Antes de excluir los `|`, compruebo que en `tasks/` todos son anotaciones, como dijiste.
+
+Confirmado: los 11 usos de `|` en `tasks/` son anotaciones de tipo. Aplico el cambio de diseño en el repositorio.
+
+Ahora el unitario del repositorio, con ids creados en tiempo de ejecución, dentro de la sección de unitarios.
+
+El filtro marcó 110 mutantes como omitidos, no los 132 que yo esperaba (12 usos de `|` × 11 operadores). Antes de ejecutar, miro qué mutantes de `|` quedaron sin filtrar.
+
+La sesión limpia está corriendo; espero a que termine.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\repository.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\cosmic-ray.toml`
+
+---
+
+## 2026-10-24 23:30:53 · Prompt
+
+```text
+<task-notification>
+<task-id>b2ofihw8p</task-id>
+<tool-use-id>toolu_01YRnaTWYr4m1UQEpkuVF9c3</tool-use-id>
+<output-file>C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\tasks\b2ofihw8p.output</output-file>
+<status>completed</status>
+<summary>Background command "Execute the pending mutants" completed (exit code 0)</summary>
+</task-notification>
+```
+
+### 2026-10-24 23:31:22 · Respuesta
+
+Repetí la sesión de mutación desde cero: sobrevive un solo mutante, el equivalente documentado del grupo 2. Antes de la sesión, `pytest` pasó 68 tests y `ruff` no encontró nada. `tasks/` sigue al 100 % de cobertura, y lo único sin cubrir en el proyecto es `/health` en `main.py:18`.
+
+## Reporte final
+
+| | Mutantes |
+|---|---|
+| Total de la sesión | 186 |
+| Omitidos por el filtro de `\|` | 110 |
+| Ejecutados | 76 |
+| Muertos | 75 |
+| Supervivientes | 1 |
+
+- **Puntaje:** 75 de 76 muertos, 98,68 %.
+- **Sin el equivalente:** si se descuenta el superviviente documentado, es 75 de 75 (100 %).
+- **Lo que imprime `cr-report`:** dice `surviving mutants: 1 (0.54%)`. Ese porcentaje divide entre los 186, incluidos los omitidos, así que subestima. El valor honesto es 1/76 = 1,32 %.
+- **Último superviviente:** `RemoveDecorator` sobre `@classmethod` en `schemas.py:22`. Es el grupo 2, que dejaste como equivalente documentado.
+
+## Qué pasó con cada grupo
+
+- **Grupo 1 (`|` en anotaciones):** el filtro omitió 110 mutantes.
+  - El motivo está en `cosmic-ray.toml` junto al filtro: en Python 3.14 las anotaciones de función no se evalúan al definirla.
+  - Añadí `cr-filter-operators` al flujo de comandos del encabezado de ese archivo.
+- **Grupo 3 (`_next_id` inicial):**
+  - `tasks/repository.py` declara ahora `_next_id: int` sin valor y llama a `reset()` al final del módulo, como `users`.
+  - Los dos mutantes del valor inicial desaparecieron porque ya no existe esa línea. Por eso el total baja de 188 a 186.
+  - Los equivalentes dentro de `reset()` mueren con los tests existentes (por ejemplo, CA-01 exige `id == 1`).
+- **Grupo 4 (`==` por `is`):** el nuevo `test_repository_list_by_assignee_compara_ids_grandes_por_valor` usa ids de `int("1000")` e `int("1001")`. Ese mutante ya no sobrevive.
+
+## Cosas que conviene saber
+
+- **El filtro es más amplio que "solo equivalentes".** De los 110 omitidos, 22 sí morían antes. Son los de `routes.py:17` y `routes.py:29`, porque FastAPI evalúa esas anotacio
+
+[… respuesta recortada …]

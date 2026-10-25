@@ -5,6 +5,7 @@
 # dependencias) y no en el PATH; `pytest.exe` sí se resuelve por el PATH.
 #   cosmic-ray baseline cosmic-ray.toml
 #   cosmic-ray init cosmic-ray.toml cosmic-ray.sqlite
+#   cr-filter-operators cosmic-ray.sqlite cosmic-ray.toml
 #   cosmic-ray exec cosmic-ray.toml cosmic-ray.sqlite
 #   cr-report cosmic-ray.sqlite --show-pending
 # Las mutaciones se aplican sobre los archivos en disco: confirmar (commit) antes.
@@ -16,3 +17,12 @@ test-command = "pytest -x -q --tb=no -p no:cacheprovider"
 
 [cosmic-ray.distributor]
 name = "local"
+
+# Filtro de operadores (se aplica después de `init`, con cr-filter-operators).
+# Excluye los mutantes que cambian el operador `|` por otro (+, &, ^, /, //, <<, %,
+# *, **, >>, -). En tasks/ todos los `|` son anotaciones de tipo (`X | None`).
+# En Python 3.14 las anotaciones de función no se evalúan al definirla, así que esos
+# mutantes no cambian el comportamiento (equivalentes) y solo inflan el resultado.
+# Si se revisa este filtro, comprobar antes que `|` siga siendo solo de anotaciones.
+[cosmic-ray.filters.operators-filter]
+exclude-operators = ["core/ReplaceBinaryOperator_BitOr_.*"]

@@ -111,6 +111,7 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Iteración 4 · crear y consultar | 52 | 9 | 0 | 98 % | `03-iteracion-2.png` |
 | Iteración 5 · idempotencia (verde) | 61 | 0 | 0 | 99 % | `04-verde.png` |
 | Iteración 6 · unitarios e integración | 67 | 0 | 0 | 99 % (`tasks/` 100 %) | `05-suite-completa.png` |
+| Iteración 7 · mutation testing (refactor + test de ids grandes) | 68 | 0 | 0 | 99 % (`tasks/` 100 %) | `11-suite-tras-mutacion.png` |
 
 ### Iteraciones
 
@@ -338,8 +339,22 @@ Una fila por iteración, con el comando de la convención de evidencias.
   (`cosmic-ray.sqlite`) va en `.gitignore`.
 - **Resultado:** 188 mutantes · **96 muertos (51 %)** · 92 sobrevivientes · 0 con
   timeout. Detalle y análisis en la sección 3.
-- **Aceptado / rechazado y por qué:** pendiente de mi decisión sobre los
-  sobrevivientes.
+- **Mis decisiones sobre los sobrevivientes:** grupo 3 → corregir el diseño (no un
+  test); grupo 4 → unitario con ids grandes; grupo 1 → filtrar el operador `|`;
+  grupo 2 → dejarlo como equivalente documentado.
+- **Segunda corrida:** 186 mutantes · 110 omitidos por el filtro · 76 ejecutados ·
+  **75 muertos (98,7 %)** · 1 sobreviviente (el `@classmethod`, equivalente
+  documentado). Ver sección 3.
+- **Detalles que reportó Claude Code:**
+  - `cr-report` dice "surviving mutants: 1 (0.54%)", pero divide entre los 186,
+    incluidos los omitidos; el valor honesto es 1 de 76 (1,3 %).
+  - Guardó una copia de `tasks/` antes de correr y verificó que los cinco archivos
+    quedaron idénticos tras las 76 ejecuciones.
+- **Aceptado / rechazado y por qué:** aceptado.
+- **Tests y linter:** 68/68 · `ruff check .`: sin errores.
+- **Evidencia:** `mutacion/reporte-final.html`, `capturas/09-mutacion-final.png`
+  (resumen) y `capturas/10-ultimo-sobreviviente.png` (job 108: quitar `@classmethod`).
+- **Commit:** `test(tasks): mutation testing al 98,7 % (Cosmic Ray)`
 
 ---
 
@@ -373,6 +388,28 @@ Una fila por iteración, con el comando de la convención de evidencias.
     **Muere**: lo detecta `test_list_tasks_filtra_por_usuario_con_tareas`.
   - Misma línea, dos mutantes: uno se detecta y el otro se escapa. La diferencia
     está en los datos del test (ids pequeños), no en la línea cubierta.
+
+  **Segunda corrida (después de mis decisiones):**
+
+  | | Mutantes |
+  |---|---|
+  | Total de la sesión | 186 (2 menos: la línea de `_next_id = 1` ya no existe) |
+  | Omitidos por el filtro de `\|` | 110 |
+  | Ejecutados | 76 |
+  | Muertos | **75 (98,7 %)** |
+  | Sobrevivientes | 1: quitar `@classmethod` (equivalente documentado) |
+
+  Evidencia: `mutacion/reporte-final.html`; `capturas/09-mutacion-final.png` (el
+  reporte muestra "1 (0.54%)" porque divide entre 186; el valor real es 1 de 76) y
+  `capturas/10-ultimo-sobreviviente.png` (el único sobreviviente).
+
+  - Grupo 3 se resolvió con un refactor (ver sección 4, Refactorización 1).
+  - Grupo 4 lo mata `test_repository_list_by_assignee_compara_ids_grandes_por_valor`,
+    con ids `int("1000")` e `int("1001")` creados en tiempo de ejecución.
+  - **Costo del filtro:** de los 110 omitidos, 22 sí morían antes (las anotaciones
+    de `routes.py`, que FastAPI sí evalúa). El filtro actúa por operador y no por
+    archivo, así que Cosmic Ray ya no vigila esas anotaciones. Lo acepto: el
+    comportamiento de esas rutas lo cubren los tests de API (CA-26, CA-32, CA-41).
 
   **Lecciones:**
   - El 100 % de cobertura convivía con 3 huecos reales que la cobertura no puede ver.
@@ -410,11 +447,26 @@ Una fila por iteración, con el comando de la convención de evidencias.
   resolvió sola dentro del prompt. No hubo un intercambio de "hipótesis antes que
   soluciones" conmigo; eso queda para el bug de la aplicación.
 
+<!-- Plantilla por refactorización:
 ### Refactorización N · <code smell>
-
 - **Code smell detectado:**
 - **Cambio realizado:**
 - **Tests antes / después:**
+-->
+
+### Refactorización 1 · Estado inicial duplicado en `tasks/repository.py`
+
+- **Code smell detectado:** el valor inicial de `_next_id` vivía en dos lugares: en
+  la declaración del módulo (`_next_id: int = 1`) y en `reset()`. Lo reveló el
+  mutation testing: cambiar el `1` de la declaración por `0` o `2` no hacía fallar
+  ningún test, porque la fixture llama a `reset()` antes de cada uno. En la
+  aplicación real, ese cambio haría que la primera tarea no tuviera id 1.
+- **Cambio realizado:** igual que `users/repository.py`, el módulo declara
+  `_next_id: int` sin valor y llama a `reset()` al importarse. El estado inicial
+  vive solo en `reset()`. Además queda coherente con el proyecto base.
+- **Tests antes / después:** 67 en verde antes; 68 en verde después (se sumó el
+  unitario del grupo 4). Los mutantes dentro de `reset()` mueren con los tests
+  existentes (CA-01 exige `id == 1`).
 
 ---
 

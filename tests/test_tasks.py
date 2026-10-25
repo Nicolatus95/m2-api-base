@@ -659,6 +659,29 @@ def test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual(
     assert result == date(2026, 10, 24)
 
 
+def test_repository_list_by_assignee_compara_ids_grandes_por_valor() -> None:
+    """Unitario (CA-38): el filtro por asignado compara por valor, no por identidad.
+
+    Los ids se generan en tiempo de ejecución (`int("1000")`): CPython reutiliza
+    el mismo objeto solo para enteros pequeños, así que con ids como 1 o 2 una
+    comparación por identidad pasaría inadvertida.
+    """
+    from tasks import repository
+
+    for assignee_id in (int("1000"), int("1001")):
+        repository.add(
+            title="Revisar logs",
+            description=None,
+            due_date=FIXED_TODAY,
+            priority=3,
+            assignee_id=assignee_id,
+        )
+
+    result = repository.list_by_assignee(int("1000"))
+
+    assert [task.assignee_id for task in result] == [1000]
+
+
 # --- Integración entre recursos ---------------------------------------------
 
 

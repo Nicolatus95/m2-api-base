@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from tasks.schemas import Task, TaskCreate
 
 _tasks: dict[int, Task] = {}
-_next_id: int = 1
+_next_id: int  # el valor inicial vive solo en reset()
 _idempotency_keys: dict[str, tuple[TaskCreate, int]] = {}
 
 
@@ -62,3 +62,6 @@ def reset() -> None:
     _tasks.clear()
     _idempotency_keys.clear()
     _next_id = 1
+
+
+reset()
