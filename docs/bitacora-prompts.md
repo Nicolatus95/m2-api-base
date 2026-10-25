@@ -590,3 +590,49 @@ Dos notas:
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\conftest.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-24 21:43:57 · Prompt
+
+```text
+sigue
+```
+
+### 2026-10-24 21:44:24 · Respuesta
+
+Iteración 2.
+
+Iteración 2 terminada con el resultado esperado: pasan creación, consulta y listado, y fallan solo los 9 tests de idempotencia.
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | `9 failed, 52 passed` |
+| `ruff check .` | `All checks passed!` |
+
+Los 9 que fallan son:
+- CA-22 y CA-23.
+- Los 4 casos parametrizados de CA-24.
+- CA-27, CA-28 y CA-29.
+
+Los demás de idempotencia pasan solos, porque sin lógica de clave el comportamiento por defecto coincide con lo esperado:
+- **CA-25 y CA-26:** un fallo previo no consume la clave y un cuerpo inválido da 422.
+- **CA-30, CA-31 y CA-32:** claves distintas, sin clave y clave vacía crean tareas distintas.
+
+Lo que añadí:
+- **`tasks/service.py`:**
+  - `create_task` valida primero la fecha (422 con `invalid_request`), luego el asignado a través de `users.service.get_user` (404) y al final crea la tarea.
+  - `get_task` devuelve 404 con `not_found("tarea", …)`.
+  - `list_tasks` comprueba el usuario cuando hay filtro.
+- **`tasks/routes.py`:** `GET /tasks`, `GET /tasks/{task_id}` y `POST /tasks`, con `response_model=`. El filtro usa `Query(gt=0)` y el id de ruta usa `Path(gt=0)`.
+- **`main.py`:** monta el router de `tasks`.
+
+El aviso de que `tasks/service.py` cambió en disco corresponde a mis propias ediciones de esta iteración. No hice nada más.
+
+Esperaré tu "sigue" para la Iteración 3 (idempotencia).
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\main.py`

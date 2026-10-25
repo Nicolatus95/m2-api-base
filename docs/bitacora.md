@@ -98,6 +98,16 @@ pytest --cov=. --cov-report=term-missing --tb=no -rN
 > "mismo cuerpo") no quedan en `bitacora-prompts.md`, porque no son prompts; por eso
 > se registran aquí.
 
+### Progresión de la suite
+
+Una fila por iteración, con el comando de la convención de evidencias.
+
+| Momento | Passed | Failed | Errors | Cobertura total | Captura |
+|---|---|---|---|---|---|
+| Línea base | 6 | 0 | 0 | 98 % | `00-linea-base.png` |
+| Iteración 2 · tests en rojo | 6 | 0 | 55 | 51 % | `01-tests-rojo.png` |
+| Iteración 3 · base del recurso | 7 | 54 | 0 | 86 % | `02-iteracion-1.png` |
+
 ### Iteraciones
 
 <!-- Plantilla por iteración:
@@ -167,6 +177,40 @@ pytest --cov=. --cov-report=term-missing --tb=no -rN
   en la fixture antes de ejecutarse. `users/` y `core/` siguen igual que en la línea base.
 - **Evidencia:** `capturas/01-tests-rojo.png`
 - **Commit:** `test(tasks): tests de aceptación CA-01 a CA-41 (fase roja)`
+
+### Iteración 3 · Ajuste de tests y base del recurso
+
+- **Objetivo:** cerrar los huecos de la revisión externa en los tests y crear la base
+  del paquete `tasks/`, todavía sin rutas.
+- **Modelo:** Sonnet 5.5, esfuerzo medium.
+- **Prompt:** "Prompt C" (implementación por iteraciones con parada obligatoria), ver
+  `bitacora-prompts.md`. Esta entrada cubre sus iteraciones 0 y 1.
+- **Resultado:**
+  - Tests: CA-23 ahora exige el mensaje exacto del 409 ("La clave de idempotencia ya se
+    usó con un cuerpo distinto") y CA-40 el del 404 ("No se encontró usuario: 999").
+    No cambió nada más de los tests.
+  - `core/errors.py`: nueva `conflict(message)` (409), con docstring en el mismo formato
+    que las demás; `CLAUDE.md` la agrega a la lista del catálogo.
+  - `tasks/schemas.py`: `str_strip_whitespace` recorta `title` y `description`; un
+    validador convierte la descripción vacía en `null`; `strict=True` solo en
+    `priority` y `assignee_id`, como se decidió.
+  - `tasks/repository.py`: tareas y registro de claves en el mismo módulo; `reset()`
+    vacía ambos (resuelve P1 y P8).
+  - `tasks/service.py`: `BUSINESS_TIMEZONE`, `local_date()` (función pura) y
+    `current_date()` (resuelve P2).
+  - `tests/conftest.py`: imports con alias y reset de ambos repositorios (resuelve P9).
+  - Los 55 *errors* pasaron a 54 *failed*: los tests ya se ejecutan y fallan por la
+    razón esperada (aún no hay rutas). CA-14 pasa.
+- **Revisión (chat de Claude):**
+  - El código respeta el patrón de `users/` y las decisiones de la especificación.
+  - El docstring de la fixture de `conftest.py` sigue diciendo "datos semilla", pero
+    `tasks` arranca vacío. Detalle menor de documentación.
+  - El commit quedó como `test(tasks)` aunque agrega código de la feature; el tipo
+    correcto es `feat(tasks)`.
+- **Aceptado / rechazado y por qué:** aceptado.
+- **Tests y linter:** 7 passed, 54 failed (esperado) · cobertura 86 %.
+- **Evidencia:** `capturas/02-iteracion-1.png`
+- **Commit:** `feat(tasks): base del recurso`
 
 ---
 
