@@ -48,6 +48,18 @@ def _require_user(user_id: int) -> None:
 
 
 def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
+    """Crea una tarea, con soporte opcional de idempotencia.
+
+    `data` ya llega validado en formato (422 de Pydantic). Orden de las reglas:
+
+    1. Clave de idempotencia (vacía o de solo espacios cuenta como ausente): si ya
+       se usó con el mismo cuerpo normalizado devuelve la tarea original; si se
+       usó con otro cuerpo, 409.
+    2. Fecha límite anterior a "hoy" (`current_date()`): 422.
+    3. Asignado inexistente: 404 (el error lo levanta `users.service`).
+
+    Solo cuando se crea la tarea se registra la clave: un fallo no la consume.
+    """
     key = (idempotency_key or "").strip()
     if key:
         replayed = _replay(key, data)
@@ -64,6 +76,7 @@ def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
 
 
 def get_task(task_id: int) -> Task:
+    """Devuelve la tarea con ese id; 404 si no existe."""
     task = repository.get(task_id)
     if task is None:
         raise errors.not_found("tarea", task_id)
@@ -71,6 +84,11 @@ def get_task(task_id: int) -> Task:
 
 
 def list_tasks(assignee_id: int | None = None) -> list[Task]:
+    """Lista las tareas en orden de creación, todas o solo las de un usuario.
+
+    Con `assignee_id` primero comprueba que el usuario exista (404 si no) y después
+    filtra; un usuario existente sin tareas da una lista vacía.
+    """
     if assignee_id is None:
         return repository.list_all()
     _require_user(assignee_id)
