@@ -1278,3 +1278,104 @@ Cada uno con `assert 201 == 422` en `tests/test_tasks.py:592`.
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\schemas.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+
+---
+
+## 2026-10-25 11:06:51 · Prompt
+
+```text
+<pasted_content id="d10f">
+Revisión de code smells antes de refactorizar. NO modifiques nada.
+
+Revisa tasks/ (routes, service, schemas, repository) y tests/test_tasks.py y
+lista los code smells que encuentres. Para cada uno: archivo y líneas, qué smell
+es (nombre reconocido si existe: función larga, estado global, duplicación,
+acoplamiento, etc.), por qué es un problema aquí y qué refactorización propones.
+
+Ordénalos por impacto en mantenibilidad y marca cuáles harías en este reto y
+cuáles no valen la pena (y por qué). Respeta CLAUDE.md: legacy/ y migrations/
+están fuera de alcance.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 11:08:30 · Respuesta
+
+Encontré 9 smells que corregiría y 8 que no vale la pena tocar. Los que tienen más impacto están en los tests, no en la producción. No modifiqué nada; las líneas citadas corresponden al estado actual de los archivos.
+
+## Los que haría en este reto, de mayor a menor impacto
+
+**1. `monkeypatch.undo()` dentro de un test** — `tests/test_tasks.py:679-692`
+- **Smell:** el test depende del orden interno de los fixtures (*fragile test*).
+- **Por qué importa aquí:** `undo()` deshace todos los parches del `monkeypatch` de ese test, no solo el reloj de `today`. Si mañana otro fixture autouse usa `monkeypatch`, este test lo revertiría en silencio y probaría algo distinto sin fallar. Es el pendiente que dejaste para la refactorización.
+- **Propuesta:** un marcador `@pytest.mark.real_clock` que el fixture `today` consulte (`request.node.get_closest_marker`) para no aplicar el parche. Así el test solo sustituye `service.datetime`, sin `undo()`.
+
+**2. `create_task` mezcla idempotencia, reglas de dominio y persistencia** — `tasks/service.py:31-47`
+- **Smell:** función con varias responsabilidades, y la misma condición repetida: `if key:` en las líneas 33 y 45.
+- **Por qué importa aquí:** el orden de validación (clave → fecha → asignado → crear → registrar clave) es el núcleo de la especificación, pero hay que reconstruirlo leyendo dos bloques condicionados por la misma clave. Cualquier cambio en la idempotencia toca la misma función que las reglas de dominio.
+- **Propuesta:** extraer `_replay(key, data) -> Task | None` (busca la clave, lanza el 409 o devuelve la tarea guardada). `create_task` queda como la lista de pasos de la especificación. No cambia el comportamiento, y los tests de idempotencia (CA-22 a CA-32) lo cubren.
+
+**3. `repository.add(**data.model_dump())` acopla los campos del schema con la firma de `add`** — `tasks/service.py:44`, `tasks/repository.py:15-32`
+- **Smell:** grupo de datos repetido y cambio disperso (*data clump*, *shotgun surgery*).
+- **Por qué importa aq
+
+[… respuesta recortada …]
+
+---
+
+## 2026-10-25 11:10:57 · Prompt
+
+```text
+<pasted_content id="d10f">
+Refactoriza solo tests/test_tasks.py: puntos 1, 4, 5, 7 y 8. Confirmo el 5: el
+motivo era el ciclo test-first, cuando tasks/ no existía; ya no aplica.
+
+Reglas:
+- Antes de cambiar, ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN
+  (línea base).
+- Misma cantidad de tests y mismos nombres. No cambies ninguna aserción ni lo que
+  verifica cada test.
+- Actualiza el docstring del módulo y CLAUDE.md donde cambien las reglas (por
+  ejemplo, la de no importar tasks a nivel de módulo).
+- Después ejecuta la suite y ruff check . y muéstrame el resultado. Detente.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 11:12:29 · Respuesta
+
+Sigo con el refactor de `tests/test_tasks.py`: falta quitar el bloque CA-42 de su lugar original, porque ya lo copié junto a CA-13.
+
+Refactoricé `tests/test_tasks.py` (puntos 1, 4, 5, 7 y 8). Después de los cambios: 73 tests pasan, igual que antes. `ruff check .` no encuentra nada.
+
+```
+Name                  Stmts   Miss  Cover   Missing
+main.py                   9      1    89%   18
+tasks\*                  (100 % en repository, routes, schemas, service)
+tests\test_tasks.py     296      0   100%
+TOTAL                   513      1    99%
+73 passed in 0.69s
+----- ruff -----
+All checks passed!
+```
+Resumí las líneas que no cambian (la tabla completa tiene las mismas filas que la línea base).
+
+Solo cambió `test_tasks.py`, su cobertura (296 de 296 líneas) y el total, 520 → 513 líneas, porque quité 7 líneas de imports repetidos. `tasks/` sigue al 100 % y solo falta `/health` en `main.py:18`.
+
+## Qué hice
+
+1. **Punto 1, sin `monkeypatch.undo()`:**
+   - Capturé `REAL_CURRENT_DATE = service.current_date` al cargar el módulo, antes de que `today` la sustituya.
+   - `test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual` la restaura con `monkeypatch.setattr` y simula solo `service.datetime`, así que ya no revierte otros parches.
+   - No usé el marcador `real_clock` que propuse. Habría que registrarlo en `pyproject.toml`, y me pediste tocar solo `test_tasks.py`.
+2. **Punto 4, un solo acceso al reloj:** CA-13 y CA-42 reciben ahora el parámetro `today`, como CA-29. `_clock` queda solo dentro de la fixture y de `valid_payload` y `past_date`; el docstring del módulo lo explica.
+3. **Punto 5, imports a nivel de módulo:**
+   - Ahora hay `from tasks import repository, service` y `from tasks.schemas import TaskCreate`, y quité los 8 imports locales.
+   - CA-14 llama `service.local_date(...)`.
+4. **Punto 7, secciones:** moví `unix_timestamp` y CA-42 junto a CA-13, dentro de "Creación". La sección unitaria se llama ahora "Unitarios de tasks/ (dependencias simuladas)".
+5. 
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`

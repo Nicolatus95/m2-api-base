@@ -76,6 +76,11 @@ aceptación CA-xx). Sigue el mismo patrón que `users/`.
   "Hoy" se fija con una
   fixture autouse `today` (`monkeypatch` sobre `tasks.service.current_date`) y los
   cuerpos se arman con `valid_payload(**changes)`; nunca `date.today()` ni fechas fijas.
+  Los tests leen "hoy" con el parámetro `today`, no con `_clock` directamente.
+  `tasks` se importa a nivel de módulo (`from tasks import repository, service`); lo
+  único prohibido es `from tasks.service import current_date`. El test que prueba
+  `current_date()` real restaura la función con `REAL_CURRENT_DATE`; no usa
+  `monkeypatch.undo()`.
 
 ## Cómo ejecutar
 

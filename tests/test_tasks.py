@@ -3,13 +3,17 @@
 Fuente de verdad: docs/especificacion-tasks.md (criterios CA-01 a CA-42).
 Mismo estilo que test_users.py, con estas diferencias:
   - el docstring de cada test lleva el criterio (CA-xx) que cubre
-  - "hoy" está fijado por la fixture autouse `today`; nunca se usa `date.today()`
+  - "hoy" está fijado por la fixture autouse `today`; nunca se usa `date.today()`.
+    Los tests leen la fecha con el parámetro `today`; `valid_payload` y `past_date`
+    usan el mismo reloj (`_clock`) y solo funcionan una vez aplicada esa fixture
   - los cuerpos se arman con `valid_payload(**changes)`
-  - `tasks` no se importa a nivel de módulo: se importa dentro de la fixture o del test
+  - `tasks` se importa a nivel de módulo (`repository`, `service`, `TaskCreate`), pero
+    nadie importa `current_date` con `from tasks.service import ...`: la fixture
+    `today` lo sustituye en el módulo `service`
 
-Secciones: API (CA-01 a CA-42), unitarios de `tasks/service.py` con dependencias
-simuladas e integración con `users`. Los unitarios y la integración no tienen un CA
-propio: su docstring indica los CA con los que se relacionan.
+Secciones: API (CA-01 a CA-42), unitarios de `tasks/` con dependencias simuladas e
+integración con `users`. Los unitarios y la integración no tienen un CA propio: su
+docstring indica los CA con los que se relacionan.
 """
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
@@ -18,8 +22,14 @@ from unittest.mock import Mock
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from httpx import Response
+
+from tasks import repository, service
+from tasks.schemas import TaskCreate
 
 FIXED_TODAY = date(2026, 10, 24)
+# La función real, capturada antes de que `today` la sustituya (la usa un solo test).
+REAL_CURRENT_DATE = service.current_date
 
 
 class Clock:
@@ -38,8 +48,6 @@ _clock = Clock(FIXED_TODAY)
 @pytest.fixture(autouse=True)
 def today(monkeypatch: pytest.MonkeyPatch) -> Clock:
     """Fija "hoy" en 2026-10-24 sustituyendo `current_date` del servicio."""
-    from tasks import service
-
     _clock.value = FIXED_TODAY
     monkeypatch.setattr(service, "current_date", lambda: _clock.value)
     return _clock
@@ -61,7 +69,7 @@ def past_date() -> str:
 
 def post_task(
     client: TestClient, payload: dict[str, object], key: str | None = None
-):
+) -> Response:
     headers = {} if key is None else {"Idempotency-Key": key}
     return client.post("/tasks", json=payload, headers=headers)
 
@@ -223,22 +231,54 @@ def test_create_task_due_date_en_el_pasado_devuelve_422(
     assert isinstance(response.json()["detail"], str)
 
 
-def test_create_task_due_date_de_hoy_devuelve_201(client: TestClient) -> None:
+def test_create_task_due_date_de_hoy_devuelve_201(
+    client: TestClient, today: Clock
+) -> None:
     """CA-13: `due_date` de hoy."""
-    payload = valid_payload(due_date=_clock.value.isoformat())
+    payload = valid_payload(due_date=today.value.isoformat())
 
     response = client.post("/tasks", json=payload)
 
     assert response.status_code == 201
 
 
+def unix_timestamp(day: date) -> int:
+    """Segundos Unix de la medianoche UTC de `day`: el único instante que el modo
+    laxo de Pydantic convertía en fecha."""
+    return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+
+
+@pytest.mark.parametrize(
+    "make_due_date",
+    [
+        lambda day: unix_timestamp(day),
+        lambda day: float(unix_timestamp(day)),
+        lambda day: str(unix_timestamp(day)),
+        lambda day: f"{day.isoformat()}T00:00:00",
+        lambda day: f"{day.isoformat()}T00:00:00Z",
+    ],
+    ids=["entero", "decimal", "texto_numerico", "fecha_y_hora", "fecha_y_hora_utc"],
+)
+def test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422(
+    client: TestClient, today: Clock, make_due_date: Callable[[date], object]
+) -> None:
+    """CA-42: due_date como timestamp Unix (número o texto) o como fecha con hora."""
+    future = today.value + timedelta(days=7)
+
+    response = client.post("/tasks", json=valid_payload(due_date=make_due_date(future)))
+
+    assert response.status_code == 422
+    # Error de formato (lista de Pydantic sobre `due_date`), no de dominio (texto).
+    detail = response.json()["detail"]
+    assert isinstance(detail, list)
+    assert [error["loc"] for error in detail] == [["body", "due_date"]]
+
+
 def test_local_date_usa_la_zona_america_mexico_city() -> None:
     """CA-14: "hoy" se calcula en `America/Mexico_City`."""
-    from tasks.service import local_date
-
     instant = datetime(2026, 10, 25, 3, 0, tzinfo=timezone.utc)
 
-    assert local_date(instant) == date(2026, 10, 24)
+    assert service.local_date(instant) == date(2026, 10, 24)
 
 
 def test_create_task_prioridad_por_debajo_del_rango_devuelve_422(
@@ -564,46 +604,12 @@ def test_list_tasks_filtra_con_id_no_positivo_devuelve_422(
     assert response.status_code == 422
 
 
-def unix_timestamp(day: date) -> int:
-    """Segundos Unix de la medianoche UTC de `day`: el único instante que el modo
-    laxo de Pydantic convertía en fecha."""
-    return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
-
-
-@pytest.mark.parametrize(
-    "make_due_date",
-    [
-        lambda day: unix_timestamp(day),
-        lambda day: float(unix_timestamp(day)),
-        lambda day: str(unix_timestamp(day)),
-        lambda day: f"{day.isoformat()}T00:00:00",
-        lambda day: f"{day.isoformat()}T00:00:00Z",
-    ],
-    ids=["entero", "decimal", "texto_numerico", "fecha_y_hora", "fecha_y_hora_utc"],
-)
-def test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422(
-    client: TestClient, make_due_date: Callable[[date], object]
-) -> None:
-    """CA-42: due_date como timestamp Unix (número o texto) o como fecha con hora."""
-    future = _clock.value + timedelta(days=7)
-
-    response = client.post("/tasks", json=valid_payload(due_date=make_due_date(future)))
-
-    assert response.status_code == 422
-    # Error de formato (lista de Pydantic sobre `due_date`), no de dominio (texto).
-    detail = response.json()["detail"]
-    assert isinstance(detail, list)
-    assert [error["loc"] for error in detail] == [["body", "due_date"]]
-
-
-# --- Unitarios de tasks/service.py (dependencias simuladas) -----------------
+# --- Unitarios de tasks/ (dependencias simuladas) ---------------------------
 
 
 @pytest.fixture
 def get_user(monkeypatch: pytest.MonkeyPatch) -> Mock:
     """Simula `users.service.get_user`, la única vía de `tasks` hacia `users`."""
-    from tasks import service
-
     mock = Mock()
     monkeypatch.setattr(service.users_service, "get_user", mock)
     return mock
@@ -612,16 +618,12 @@ def get_user(monkeypatch: pytest.MonkeyPatch) -> Mock:
 @pytest.fixture
 def add_spy(monkeypatch: pytest.MonkeyPatch) -> Mock:
     """Espía `repository.add` conservando su comportamiento real."""
-    from tasks import service
-
     spy = Mock(wraps=service.repository.add)
     monkeypatch.setattr(service.repository, "add", spy)
     return spy
 
 
-def task_create(**changes: object):
-    from tasks.schemas import TaskCreate
-
+def task_create(**changes: object) -> TaskCreate:
     return TaskCreate(**valid_payload(**changes))
 
 
@@ -629,8 +631,6 @@ def test_service_create_task_sin_asignado_no_consulta_usuarios(
     get_user: Mock,
 ) -> None:
     """Unitario (CA-01): sin `assignee_id` no se llama a `get_user`."""
-    from tasks import service
-
     service.create_task(task_create())
 
     get_user.assert_not_called()
@@ -640,8 +640,6 @@ def test_service_create_task_con_asignado_consulta_el_usuario_una_vez(
     get_user: Mock,
 ) -> None:
     """Unitario (CA-02, CA-18): con `assignee_id` se llama a `get_user` con ese id."""
-    from tasks import service
-
     service.create_task(task_create(assignee_id=3))
 
     get_user.assert_called_once_with(3)
@@ -651,8 +649,6 @@ def test_service_create_task_con_fecha_pasada_no_consulta_usuarios_ni_guarda(
     get_user: Mock, add_spy: Mock
 ) -> None:
     """Unitario (CA-12, CA-21): la fecha pasada corta antes de `get_user` y `add`."""
-    from tasks import service
-
     data = task_create(due_date=past_date(), assignee_id=1)
 
     with pytest.raises(HTTPException) as error:
@@ -667,8 +663,6 @@ def test_service_create_task_reintento_con_la_misma_clave_no_vuelve_a_guardar(
     add_spy: Mock,
 ) -> None:
     """Unitario (CA-22): el reintento devuelve la tarea guardada sin llamar a `add`."""
-    from tasks import service
-
     first = service.create_task(task_create(), "k1")
     second = service.create_task(task_create(), "k1")
 
@@ -680,9 +674,8 @@ def test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unitario (CA-14): `current_date()` devuelve la fecha local del instante actual."""
-    from tasks import service
-
-    monkeypatch.undo()  # quita el reloj falso de `today`: aquí se prueba la real
+    # Restaura la función real que `today` sustituyó; solo se simula `datetime`.
+    monkeypatch.setattr(service, "current_date", REAL_CURRENT_DATE)
     fake_datetime = Mock()
     fake_datetime.now.return_value = datetime(2026, 10, 25, 3, 0, tzinfo=timezone.utc)
     monkeypatch.setattr(service, "datetime", fake_datetime)
@@ -699,8 +692,6 @@ def test_repository_list_by_assignee_compara_ids_grandes_por_valor() -> None:
     el mismo objeto solo para enteros pequeños, así que con ids como 1 o 2 una
     comparación por identidad pasaría inadvertida.
     """
-    from tasks import repository
-
     for assignee_id in (int("1000"), int("1001")):
         repository.add(
             title="Revisar logs",
