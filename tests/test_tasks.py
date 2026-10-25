@@ -6,10 +6,16 @@ Mismo estilo que test_users.py, con estas diferencias:
   - "hoy" está fijado por la fixture autouse `today`; nunca se usa `date.today()`
   - los cuerpos se arman con `valid_payload(**changes)`
   - `tasks` no se importa a nivel de módulo: se importa dentro de la fixture o del test
+
+Secciones: API (CA-01 a CA-41), unitarios de `tasks/service.py` con dependencias
+simuladas e integración con `users`. Los unitarios y la integración no tienen un CA
+propio: su docstring indica los CA con los que se relacionan.
 """
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 FIXED_TODAY = date(2026, 10, 24)
@@ -555,3 +561,127 @@ def test_list_tasks_filtra_con_id_no_positivo_devuelve_422(
     response = client.get("/tasks", params={"assignee_id": assignee_id})
 
     assert response.status_code == 422
+
+
+# --- Unitarios de tasks/service.py (dependencias simuladas) -----------------
+
+
+@pytest.fixture
+def get_user(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Simula `users.service.get_user`, la única vía de `tasks` hacia `users`."""
+    from tasks import service
+
+    mock = Mock()
+    monkeypatch.setattr(service.users_service, "get_user", mock)
+    return mock
+
+
+@pytest.fixture
+def add_spy(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Espía `repository.add` conservando su comportamiento real."""
+    from tasks import service
+
+    spy = Mock(wraps=service.repository.add)
+    monkeypatch.setattr(service.repository, "add", spy)
+    return spy
+
+
+def task_create(**changes: object):
+    from tasks.schemas import TaskCreate
+
+    return TaskCreate(**valid_payload(**changes))
+
+
+def test_service_create_task_sin_asignado_no_consulta_usuarios(
+    get_user: Mock,
+) -> None:
+    """Unitario (CA-01): sin `assignee_id` no se llama a `get_user`."""
+    from tasks import service
+
+    service.create_task(task_create())
+
+    get_user.assert_not_called()
+
+
+def test_service_create_task_con_asignado_consulta_el_usuario_una_vez(
+    get_user: Mock,
+) -> None:
+    """Unitario (CA-02, CA-18): con `assignee_id` se llama a `get_user` con ese id."""
+    from tasks import service
+
+    service.create_task(task_create(assignee_id=3))
+
+    get_user.assert_called_once_with(3)
+
+
+def test_service_create_task_con_fecha_pasada_no_consulta_usuarios_ni_guarda(
+    get_user: Mock, add_spy: Mock
+) -> None:
+    """Unitario (CA-12, CA-21): la fecha pasada corta antes de `get_user` y `add`."""
+    from tasks import service
+
+    data = task_create(due_date=past_date(), assignee_id=1)
+
+    with pytest.raises(HTTPException) as error:
+        service.create_task(data)
+
+    assert error.value.status_code == 422
+    get_user.assert_not_called()
+    add_spy.assert_not_called()
+
+
+def test_service_create_task_reintento_con_la_misma_clave_no_vuelve_a_guardar(
+    add_spy: Mock,
+) -> None:
+    """Unitario (CA-22): el reintento devuelve la tarea guardada sin llamar a `add`."""
+    from tasks import service
+
+    first = service.create_task(task_create(), "k1")
+    second = service.create_task(task_create(), "k1")
+
+    add_spy.assert_called_once()
+    assert second == first
+
+
+def test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unitario (CA-14): `current_date()` devuelve la fecha local del instante actual."""
+    from tasks import service
+
+    monkeypatch.undo()  # quita el reloj falso de `today`: aquí se prueba la real
+    fake_datetime = Mock()
+    fake_datetime.now.return_value = datetime(2026, 10, 25, 3, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(service, "datetime", fake_datetime)
+
+    result = service.current_date()
+
+    assert result == date(2026, 10, 24)
+
+
+# --- Integración entre recursos ---------------------------------------------
+
+
+def test_integracion_usuario_creado_por_api_recibe_y_lista_su_tarea(
+    client: TestClient,
+) -> None:
+    """Integración users ↔ tasks (relacionado con CA-02, CA-33 y CA-38).
+
+    Integra los dos routers con sus repositorios reales y sin simulaciones:
+    `POST /users` crea al usuario, `tasks` lo valida a través de `users.service`
+    al asignarle una tarea, y la tarea se recupera por el filtro `assignee_id` y
+    por su id.
+    """
+    user = client.post(
+        "/users", json={"name": "Margaret Hamilton", "email": "margaret@example.com"}
+    ).json()
+    created = client.post("/tasks", json=valid_payload(assignee_id=user["id"])).json()
+
+    listed = client.get("/tasks", params={"assignee_id": user["id"]})
+    fetched = client.get(f"/tasks/{created['id']}")
+
+    assert created["assignee_id"] == user["id"]
+    assert listed.status_code == 200
+    assert listed.json() == [created]
+    assert fetched.status_code == 200
+    assert fetched.json() == created

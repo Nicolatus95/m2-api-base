@@ -679,3 +679,116 @@ No he hecho commit. La rama es `feature/tasks` y hay cambios sin confirmar, entr
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+
+---
+
+## 2026-10-24 22:49:27 · Prompt
+
+```text
+<pasted_content id="d10f">
+Fase 3: completar la suite de tests. La suite actual son tests de API; faltan
+unitarios con dependencias simuladas y una integración entre recursos.
+
+1. Unit tests de tasks/service.py (arrange/act/assert, con monkeypatch o
+   unittest.mock):
+   - create_task sin assignee_id no llama a users.service.get_user
+   - create_task con assignee_id llama a get_user una vez, con ese id
+   - con fecha pasada no se llama a get_user ni a repository.add
+   - un reintento con la misma clave no vuelve a llamar a repository.add
+   - current_date() devuelve local_date() del instante actual (hoy es la única
+     línea sin cubrir de tasks/)
+2. Un test de integración entre recursos: crear un usuario con POST /users,
+   crearle una tarea, filtrarla con GET /tasks?assignee_id= y consultarla con
+   GET /tasks/{id}. Explica en su docstring qué integra.
+
+La fixture autouse `today` sustituye current_date en todo test_tasks.py. Si para
+los unitarios conviene un archivo aparte, propónmelo antes de crearlo, porque
+CLAUDE.md dice "un archivo por recurso".
+
+Al terminar ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y
+ruff check . y detente para mostrarme el resultado.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 22:50:28 · Respuesta
+
+No necesito un archivo aparte: el único roce es que `today` sustituye `current_date` en todo el archivo. El test de `current_date()` lo resuelve con `monkeypatch.undo()`, así que todo queda en `tests/test_tasks.py`. Primero los imports y el docstring del módulo.
+
+Añadí los cinco unitarios y la integración, todo en `tests/test_tasks.py`. No creé un archivo aparte. Con `monkeypatch.undo()` en el test de `current_date()` no hacía falta tocar la regla de "un archivo por recurso".
+
+| Comando | Resultado |
+|---|---|
+| `pytest --cov=. --cov-report=term-missing --tb=no -rN` | `67 passed` (6 de `users`, 55 de API, 5 unitarios y 1 de integración) |
+| `ruff check .` | `All checks passed!` |
+| Cobertura | `tasks/service.py` pasa de 97 % a **100 %**; todo `tasks/` está al 100 % |
+
+Lo único que queda sin cubrir en el proyecto es `/health` en `main.py:18`, que ya estaba así y no es de `tasks`.
+
+## Unitarios
+
+Las simulaciones están en dos fixtures:
+- **`get_user`:** un `Mock` que sustituye `users.service.get_user`. Verifica la regla de que `tasks` consulta usuarios solo a través de `users.service`.
+- **`add_spy`:** un espía sobre `repository.add` que conserva el comportamiento real.
+
+Los cinco tests:
+- **Sin `assignee_id`:** `get_user.assert_not_called()`.
+- **Con `assignee_id=3`:** `get_user.assert_called_once_with(3)`.
+- **Con fecha pasada:** pasa `assignee_id=1`, para que el assert de "no se llama a `get_user`" no sea trivial. Comprueba también el 422 y que `add` no se llama.
+- **Reintento con la misma clave:** `add_spy.assert_called_once()` y la segunda respuesta es igual a la primera.
+- **`current_date()`:** simula `datetime.now` y `local_date` con un instante fijo. Comprueba que se llama a `now(timezone.utc)` y que su resultado se pasa a `local_date`.
+
+## Integración
+
+Un test que usa `POST /users` y crea al usuario 5. Le asigna una tarea, la filtra con `GET /tasks?assignee_id=5` y la consulta con `GET /tasks/{id}`. El docstring explica que integra los dos routers y sus reposi
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+
+---
+
+## 2026-10-24 22:56:16 · Prompt
+
+```text
+<pasted_content id="d10f">
+Dos ajustes:
+
+1. El test de current_date() está sobre-simulado: al simular datetime y local_date
+   verifica cómo está escrita la función, no qué devuelve. Reescríbelo para simular
+   solo datetime.now (instante fijo 2026-10-25 03:00 UTC), usar el local_date real y
+   comprobar únicamente que el resultado es date(2026, 10, 24). Mantén el
+   monkeypatch.undo() por ahora; lo resolveremos en la refactorización.
+2. Añade a la sección tasks/ de CLAUDE.md la regla para los docstrings: los unitarios
+   usan "Unitario (CA-xx)" y la integración "relacionado con CA-xx", con el CA más
+   cercano.
+
+Ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y ruff check . y
+muéstrame el resultado.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 22:56:34 · Respuesta
+
+Hice los dos ajustes y la suite sigue en verde.
+
+| Comando | Resultado |
+|---|---|
+| `pytest --cov=. --cov-report=term-missing --tb=no -rN` | `67 passed` |
+| `ruff check .` | `All checks passed!` |
+| Cobertura | `tasks/` al 100 %; lo único sin cubrir es `/health` en `main.py:18`, igual que antes |
+
+1. **Test de `current_date()`:**
+   - Ahora simula solo `datetime`, con `now()` devolviendo 2026-10-25 03:00 UTC.
+   - Usa el `local_date` real y comprueba solo que el resultado es `date(2026, 10, 24)`.
+   - Mantuve `monkeypatch.undo()` con su comentario.
+   - Lo renombré a `test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual`, porque el nombre anterior describía la implementación.
+2. **`CLAUDE.md`:** añadí en la sección `tasks/` la regla de docstrings. Los unitarios de `service.py` usan "Unitario (CA-xx)", y la integración entre recursos usa "relacionado con CA-xx". En ambos casos va el CA más cercano.
+
+Me detengo aquí a esperar tu siguiente instrucción.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`

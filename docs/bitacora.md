@@ -93,6 +93,7 @@ pytest --cov=. --cov-report=term-missing --tb=no -rN
 | Modelo para revisar la especificación | Seguir con Sonnet o subir a Opus | Opus, esfuerzo high | Los errores de la especificación se propagan a tests y código; revisar cuesta pocos tokens. |
 | Mensaje "tarea no encontrado" (P7) | Aceptarlo o cambiar `not_found` | Mensaje neutro: "No se encontró <recurso>: <id>" | La redacción correcta también se evalúa. Claude recomendaba aceptarlo para no tocar `users`; preferí corregirlo de raíz en el catálogo. Costo asumido: cambia el mensaje de `users` y un assert de `test_users.py`, que se documentará en el CHANGELOG. |
 | Modo estricto de Pydantic (P11) | En los tres campos o solo en algunos | Solo `priority` y `assignee_id` | En `due_date` podría rechazar también `"2026-10-24"`, porque FastAPI valida un `dict` de Python. Lo del timestamp queda como limitación. |
+| Herramienta de mutation testing | `mutmut` (solo Linux/WSL), Cosmic Ray, `pytest-gremlins` | Cosmic Ray | `mutmut` necesita `fork()` y no corre en Windows nativo. Aunque instalé WSL, elegí Cosmic Ray porque corre en el mismo entorno que el resto de las evidencias (Windows, Python 3.14) y Claude Code puede ejecutarlo, analizar los sobrevivientes y proponer tests en el mismo ciclo. `pytest-gremlins` es más nuevo y la comparación que lo recomienda es de sus autores. |
 
 > Nota: las elecciones de las preguntas de opción múltiple de Claude Code (409 y
 > "mismo cuerpo") no quedan en `bitacora-prompts.md`, porque no son prompts; por eso
@@ -276,6 +277,54 @@ Una fila por iteración, con el comando de la convención de evidencias.
 - **Tests y linter:** 61/61 · `ruff check .`: sin errores · cobertura 99 %.
 - **Evidencia:** `capturas/04-verde.png`
 - **Commit:** `feat(tasks): idempotencia en POST /tasks` (dd29821)
+
+### Iteración 6 · Unitarios con mocks e integración entre recursos (Fase 3)
+
+- **Objetivo:** completar la suite con lo que faltaba según la revisión de la
+  Iteración 2: unitarios del servicio con dependencias simuladas y un test de
+  integración `users` ↔ `tasks`.
+- **Modelo:** Sonnet 5.5, esfuerzo high.
+- **Prompt:** "Prompt D", ver `bitacora-prompts.md`.
+- **Resultado:**
+  - Todo en `tests/test_tasks.py`; no hizo falta un archivo aparte (se respetó "un
+    archivo por recurso").
+  - Fixtures nuevas: `get_user` (un `Mock` que sustituye `users.service.get_user`) y
+    `add_spy` (un espía con `Mock(wraps=...)` sobre `repository.add` que conserva el
+    comportamiento real).
+  - 5 unitarios: sin asignado no consulta usuarios; con asignado llama a `get_user`
+    una vez con ese id; con fecha pasada no consulta usuarios ni guarda (usa
+    `assignee_id=1` para que el assert no sea trivial); un reintento con la misma
+    clave no vuelve a llamar a `add`; `current_date()` usa `local_date()` sobre el
+    instante actual.
+  - 1 test de integración: crea un usuario con `POST /users`, le asigna una tarea, la
+    recupera por el filtro y por id. Sin simulaciones.
+  - **67 passed**; `tasks/` queda al 100 % de cobertura.
+- **Revisión (chat de Claude):**
+  - Los unitarios y la integración están bien planteados.
+  - **El test de `current_date()` está sobre-simulado:** simula a la vez `datetime` y
+    `local_date`, así que verifica *cómo* está escrita la función (qué llama y con qué
+    argumentos) y no *qué* devuelve. Si `current_date()` se reescribiera de otra forma
+    equivalente, el test fallaría sin que haya un bug. Es mejor simular solo el
+    instante (03:00 UTC) y comprobar con el `local_date` real que el resultado es el
+    24 de octubre.
+  - `monkeypatch.undo()` quita el reloj falso de la fixture autouse `today`. Funciona,
+    pero es un rodeo que nace del mismo problema que el `_clock` global: la fixture
+    `today` se aplica a todo el archivo. → Se suma al candidato de refactorización de
+    la Fase 4.
+  - Los unitarios no tienen un CA propio; Claude Code usó "Unitario (CA-xx)" y
+    "relacionado con CA-xx". Conviene escribir esa regla en `CLAUDE.md`.
+- **Corrección aplicada:**
+  - El test de `current_date()` ahora simula solo `datetime.now` (2026-10-25 03:00
+    UTC), usa el `local_date` real y verifica únicamente el resultado (24 de
+    octubre). Claude Code además lo renombró a
+    `test_current_date_devuelve_la_fecha_de_mexico_para_el_instante_actual`, porque
+    el nombre anterior describía la implementación.
+  - `CLAUDE.md` documenta la regla de docstrings para unitarios ("Unitario (CA-xx)")
+    e integración ("relacionado con CA-xx").
+- **Aceptado / rechazado y por qué:** aceptado tras las correcciones.
+- **Tests y linter:** 67/67 · `ruff check .`: sin errores · `tasks/` al 100 %.
+- **Evidencia:** `capturas/05-suite-completa.png`
+- **Commit:** `test(tasks): unitarios del servicio e integración entre recursos`
 
 ---
 

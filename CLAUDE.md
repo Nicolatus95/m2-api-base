@@ -68,7 +68,10 @@ aceptación CA-xx). Sigue el mismo patrón que `users/`.
   `tests/conftest.py` llama los dos `reset()` en su fixture, importando los
   repositorios con alias (`user_repository`, `task_repository`).
 - Los tests van en `tests/test_tasks.py`, con el estilo de `test_users.py`. Cada test
-  menciona en su docstring el criterio (CA-xx) que cubre. "Hoy" se fija con una
+  menciona en su docstring el criterio (CA-xx) que cubre. Los tests unitarios de
+  `service.py` (dependencias simuladas) usan "Unitario (CA-xx)" y el de integración
+  entre recursos usa "relacionado con CA-xx", siempre con el CA más cercano.
+  "Hoy" se fija con una
   fixture autouse `today` (`monkeypatch` sobre `tasks.service.current_date`) y los
   cuerpos se arman con `valid_payload(**changes)`; nunca `date.today()` ni fechas fijas.
 
