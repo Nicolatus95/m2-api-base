@@ -250,14 +250,16 @@ Los identificadores `CA-xx` nombran los tests. Todas las fechas relativas (`hoy`
   aplicaría el horario de verano que México eliminó. CA-14 no se ve afectado: su
   instante da 24 de octubre con ambas reglas.
 
-## Plan de implementación (para el paso siguiente)
+## Plan de implementación (completado)
+
+Los siete pasos están hechos y CA-01 a CA-41 pasan.
 
 1. Ejecutar `pip install -r requirements.txt`: `tzdata` aún no está instalado en
    `.venv`, y sin él importar `tasks.service` falla y con ello toda la suite.
 2. `core/errors.py`:
    - ✅ **Hecho:** el mensaje de `not_found` es ahora "No se encontró <recurso>: <id>"
      y el assert de `tests/test_users.py` espera "No se encontró usuario: 999".
-   - **Pendiente:** añadir `conflict(message)` (409).
+   - ✅ **Hecho:** `conflict(message)` (409).
 3. Crear el paquete `tasks/` (`__init__.py`, `routes.py`, `service.py`, `schemas.py`,
    `repository.py`), con el registro de claves y `reset()` en el repositorio.
 4. Declarar `priority` y `assignee_id` con `strict=True`, `assignee_id` con

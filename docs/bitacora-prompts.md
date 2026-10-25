@@ -636,3 +636,46 @@ Esperaré tu "sigue" para la Iteración 3 (idempotencia).
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\main.py`
+
+---
+
+## 2026-10-24 21:49:27 · Prompt
+
+```text
+sigue
+```
+
+### 2026-10-24 21:49:53 · Respuesta
+
+Iteración 3.
+
+Toda la suite está en verde. Dejo la especificación al día, porque su plan seguía marcando `conflict` como pendiente.
+
+Iteración 3 terminada: la suite completa está en verde.
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | `61 passed` (6 de `users` y 55 de `tasks`, que cubren CA-01 a CA-41) |
+| `ruff check .` | `All checks passed!` |
+| Cobertura | 99 % en total, 100 % en `tasks/` salvo una línea |
+
+La línea sin cubrir es el cuerpo de `current_date()` en `tasks/service.py:28`. Los tests siempre la sustituyen, y eso es lo que pide la especificación. La otra sin cubrir es `/health` en `main.py:18`.
+
+Lo que añadí:
+- **`tasks/service.py`:** `create_task(data, idempotency_key=None)` sigue el orden de la especificación.
+  - Una clave vacía o de solo espacios se trata como ausente.
+  - Con una clave ya registrada y el mismo cuerpo normalizado, devuelve la tarea guardada. Si el cuerpo es distinto, lanza `conflict` con el mensaje de la especificación, guardado en `IDEMPOTENCY_CONFLICT_MESSAGE`.
+  - Después aplica la fecha pasada (422) y el asignado inexistente (404).
+  - La clave se registra solo tras crear la tarea con éxito, así que un fallo de dominio no la consume.
+- **`tasks/routes.py`:** `POST /tasks` lee el header `Idempotency-Key` con `Header()` y lo pasa al servicio.
+- **`docs/especificacion-tasks.md`:** marqué `conflict` como hecho y el plan como completado.
+
+No modifiqué ningún test después de la Iteración 0, y ninguno me pareció incorrecto.
+
+No he hecho commit. La rama es `feature/tasks` y hay cambios sin confirmar, entre ellos las carpetas `docs/` y `.claude/`, que ya estaban sin seguimiento. ¿Preparo el commit?
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`

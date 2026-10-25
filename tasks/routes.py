@@ -5,7 +5,7 @@ rechazan aquí con 422 (`gt=0`); que el id exista lo decide el servicio (404).
 """
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Header, Path, Query, status
 
 from tasks import service
 from tasks.schemas import Task, TaskCreate
@@ -24,5 +24,8 @@ def get_task(task_id: Annotated[int, Path(gt=0)]) -> Task:
 
 
 @router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
-def create_task(data: TaskCreate) -> Task:
-    return service.create_task(data)
+def create_task(
+    data: TaskCreate,
+    idempotency_key: Annotated[str | None, Header()] = None,
+) -> Task:
+    return service.create_task(data, idempotency_key)

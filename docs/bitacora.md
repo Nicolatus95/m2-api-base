@@ -107,6 +107,7 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Línea base | 6 | 0 | 0 | 98 % | `00-linea-base.png` |
 | Iteración 2 · tests en rojo | 6 | 0 | 55 | 51 % | `01-tests-rojo.png` |
 | Iteración 3 · base del recurso | 7 | 54 | 0 | 86 % | `02-iteracion-1.png` |
+| Iteración 4 · crear y consultar | 52 | 9 | 0 | 98 % | `03-iteracion-2.png` |
 
 ### Iteraciones
 
@@ -206,11 +207,45 @@ Una fila por iteración, con el comando de la convención de evidencias.
   - El docstring de la fixture de `conftest.py` sigue diciendo "datos semilla", pero
     `tasks` arranca vacío. Detalle menor de documentación.
   - El commit quedó como `test(tasks)` aunque agrega código de la feature; el tipo
-    correcto es `feat(tasks)`.
+    correcto sería `feat(tasks)`. Lo mismo en la iteración 4.
 - **Aceptado / rechazado y por qué:** aceptado.
 - **Tests y linter:** 7 passed, 54 failed (esperado) · cobertura 86 %.
 - **Evidencia:** `capturas/02-iteracion-1.png`
-- **Commit:** `feat(tasks): base del recurso`
+- **Commit:** `test(tasks): base del recurso` (25cb0b3)
+
+### Iteración 4 · Crear, consultar y listar (sin idempotencia)
+
+- **Objetivo:** lógica de negocio, rutas y montaje del router; la idempotencia queda
+  para la siguiente iteración.
+- **Modelo:** Sonnet 5.5, esfuerzo medium.
+- **Prompt:** "sigue" (iteración 2 del Prompt C), ver `bitacora-prompts.md` (21:44).
+- **Resultado:**
+  - `tasks/service.py`: `create_task` valida primero la fecha (422,
+    `invalid_request`), luego el asignado vía `users.service.get_user` (404) y al final
+    crea; `get_task` (404 con `not_found("tarea", …)`); `list_tasks` comprueba el
+    usuario cuando hay filtro.
+  - `tasks/routes.py`: `GET /tasks`, `GET /tasks/{task_id}` y `POST /tasks` con
+    `response_model=`; `Query(gt=0)` en el filtro y `Path(gt=0)` en el id.
+  - `main.py`: monta el router de `tasks`.
+  - Fallan solo 9 tests, todos de idempotencia: CA-22, CA-23, los 4 casos de CA-24,
+    CA-27, CA-28 y CA-29.
+- **Hallazgo:** 5 tests de idempotencia (CA-25, 26, 30, 31 y 32) **pasan sin que exista
+  la lógica de claves**, porque sin idempotencia el comportamiento por defecto ya
+  coincide. No prueban que la funcionalidad exista: protegen contra regresiones una vez
+  que exista (por ejemplo, que una clave vacía no empiece a deduplicar). Es un buen
+  caso para el mutation testing de la Fase 3.
+- **Revisión (chat de Claude):**
+  - El orden de validación coincide con la especificación (formato → fecha →
+    asignado) y `tasks` consulta usuarios solo vía `users.service`.
+  - Las rutas usan `Annotated[...]`, estilo más moderno que el de `users/`; es
+    compatible con el linter y no rompe la convención.
+  - `main.py` sigue con el título "API de usuarios" aunque ya expone tareas. → Para la
+    fase de documentación.
+- **Aceptado / rechazado y por qué:** aceptado.
+- **Tests y linter:** 52 passed, 9 failed (esperado) · `ruff check .`: sin errores ·
+  cobertura 98 %.
+- **Evidencia:** `capturas/03-iteracion-2.png`
+- **Commit:** `test(tasks): Crear y consultar sin idempotencia` (6b8150a)
 
 ---
 
