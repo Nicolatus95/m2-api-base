@@ -26,6 +26,49 @@ el proyecto corre sin infraestructura.
 - Rutas específicas antes que rutas con parámetro: `/users/search` debe declararse
   **antes** de `/users/{user_id}`.
 
+## Recurso `tasks/`
+
+Fuente de verdad: `docs/especificacion-tasks.md` (campos, endpoints y criterios de
+aceptación CA-xx). Sigue el mismo patrón que `users/`.
+
+- Validación de formato (longitudes, rangos, tipos, recorte de espacios) en
+  `schemas.py`; reglas de dominio (fecha pasada, asignado inexistente, conflicto de
+  idempotencia) en `service.py`. La fecha pasada nunca se valida en el schema.
+- `title` y `description` se recortan; una `description` vacía se guarda como `null`.
+  Las longitudes se miden después del recorte.
+- `priority` y `assignee_id` llevan `strict=True` (rechazan booleanos y texto).
+  `due_date` no: se acepta en modo laxo (ver "Limitaciones conocidas" de la
+  especificación).
+- Ids ≤ 0 son datos mal formados (422, no 404): `Field(gt=0)` en `assignee_id`,
+  `Path(gt=0)` en `task_id` y `Query(gt=0)` en el filtro de `GET /tasks`. Los
+  parámetros de ruta y de consulta no llevan `strict`.
+- "Hoy" se calcula en `America/Mexico_City` (`BUSINESS_TIMEZONE`, constante del módulo
+  con `zoneinfo`; en Windows exige `tzdata`, que está en `requirements.txt`).
+  `local_date(instant)` es una función pura que convierte un instante a esa zona;
+  `current_date()` devuelve `local_date(datetime.now(timezone.utc))` y es la única vía
+  para obtener "hoy". La lógica nunca llama `date.today()` ni `datetime.now()`, y nadie
+  importa `current_date` con `from tasks.service import ...`.
+- Orden en `POST /tasks`: formato (422), `Idempotency-Key` (201 repetido o 409), fecha
+  pasada (422), asignado inexistente (404).
+- `Idempotency-Key`: clave global; vacía o de solo espacios cuenta como ausente. Se
+  compara el cuerpo normalizado. Solo se registran las peticiones con 201. Un
+  reintento con la misma clave devuelve la respuesta original aunque `due_date` ya
+  haya vencido (intencional).
+- `tasks/service.py` consulta usuarios con `users.service`, nunca con `users.repository`.
+- El 409 de idempotencia se levanta con `errors.conflict(message)`; no se usa
+  `HTTPException` directamente.
+- `not_found` pasa a un mensaje neutro, "No se encontró <recurso>: <id>", para todos
+  los recursos (cambio transversal que también afecta a `users` y a `test_users.py`).
+- Los listados salen en orden de creación (`id` ascendente).
+- `tasks/repository.py` guarda las tareas **y** el registro de claves de idempotencia,
+  sin datos semilla. `reset()` deja ambos vacíos y `_next_id` en 1.
+  `tests/conftest.py` llama los dos `reset()` en su fixture, importando los
+  repositorios con alias (`user_repository`, `task_repository`).
+- Los tests van en `tests/test_tasks.py`, con el estilo de `test_users.py`. Cada test
+  menciona en su docstring el criterio (CA-xx) que cubre. "Hoy" se fija con una
+  fixture autouse `today` (`monkeypatch` sobre `tasks.service.current_date`) y los
+  cuerpos se arman con `valid_payload(**changes)`; nunca `date.today()` ni fechas fijas.
+
 ## Cómo ejecutar
 
 ```bash

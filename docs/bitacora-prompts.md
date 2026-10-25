@@ -42,3 +42,320 @@ Cada recurso (por ejemplo `users/`) sigue el mismo patrón:
 - No se modifican `migrations/` ni `legacy/`.
 
 El proyecto no usa base de datos y corre sin infraestructura.
+
+---
+
+## 2026-10-24 20:20:45 · Prompt
+
+```text
+<pasted_content id="d10f">
+Vamos a agregar un recurso nuevo `tasks` a este proyecto. En este paso NO escribas
+código ni tests: solo vamos a dejar lista la especificación y el contexto.
+
+Antes de crear nada, revisa @CLAUDE.md, @core/errors.py y el recurso de referencia
+@users/routes.py, @users/service.py, @users/schemas.py, @users/repository.py y
+@tests/test_users.py. Si algo de la especificación de abajo choca con las
+convenciones del proyecto o es ambiguo, pregúntame antes de continuar.
+
+## Tarea 1 — Crear `docs/especificacion-tasks.md`
+
+Documento en español con objetivo, alcance y criterios de aceptación:
+
+**Objetivo:** registrar tareas operativas del equipo, opcionalmente asignadas a un
+usuario existente, para reducir trabajo no registrado y mejorar la trazabilidad.
+
+**Campos de entrada (`TaskCreate`):**
+- `title`: obligatorio, 3 a 120 caracteres; un título de solo espacios es inválido → 422
+- `description`: opcional, máximo 1000 caracteres → 422
+- `due_date`: obligatoria, formato fecha (YYYY-MM-DD), hoy o posterior; fecha pasada → 422
+- `priority`: entero de 1 a 5, por defecto 3; fuera de rango → 422
+- `assignee_id`: opcional; si se envía, el usuario debe existir → 404
+
+**Endpoints:**
+- `POST /tasks` → 201 con la tarea creada (incluye `id` y `created_at`)
+  - Header opcional `Idempotency-Key`:
+    - misma clave + mismo cuerpo → 201 con la misma tarea, sin crear un duplicado
+    - misma clave + cuerpo distinto → 409
+- `GET /tasks/{task_id}` → 200 con la tarea; 404 si no existe
+- `GET /tasks` → 200 con todas las tareas
+- `GET /tasks?assignee_id=<id>` → 200 con las tareas de ese usuario (lista vacía si
+  no tiene); 404 si el usuario no existe
+
+**Decisiones de diseño:**
+- Validación de formato (longitudes, rangos) en `schemas.py` con Pydantic.
+- Reglas de dominio en `service.py` con `core.errors`: fecha pasada (422), asignado
+  inexistente (404), conflicto de idempotencia (409).
+- La fecha actual se obtiene de una función propia de `tasks/service.py`, para poder
+  sustituirla en los tests; la lógica nunca llama `date.today()` directamente.
+- `tasks/service.py` consulta usuarios a través de `users.service`, nunca de
+  `users.repository`.
+- Si ninguna función de `core/errors.py` encaja para el 409 de idempotencia, propón
+  cómo resolverlo (no uses `HTTPException` directamente) y espera mi aprobación.
+
+Incluye una tabla de criterios de aceptación numerados (CA-01, CA-02, …) con:
+caso, petición, respuesta esperada. Los usaremos para nombrar los tests.
+
+## Tarea 2 — Actualizar `CLAUDE.md`
+
+Agrega una sección "Recurso `tasks/`" que:
+- referencie `docs/especificacion-tasks.md` como fuente de verdad del recurso
+- indique que sigue el mismo patrón que `users/`
+- resuma las decisiones de diseño de arriba en reglas breves
+- indique que `tasks/repository.py` debe tener `reset()` y que se llame en la
+  fixture de `tests/conftest.py`
+- indique que los tests van en `tests/test_tasks.py`, con el estilo de
+  `test_users.py`, y que cada test menciona en su docstring el criterio (CA-xx)
+  que cubre
+
+No modifiques nada más del `CLAUDE.md` existente.
+
+Al terminar, muéstrame un resumen de los cambios y lista cualquier duda o riesgo
+que veas en la especificación.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 20:25:27 · Respuesta
+
+Me falta leer `tests/conftest.py`, porque la Tarea 2 depende de él.
+
+Hay un punto que choca con las convenciones y varios ambiguos. Antes de escribir nada necesito tus decisiones.
+
+Con tus respuestas ya puedo escribir la especificación.
+
+Dejé lista la especificación y la sección nueva de `CLAUDE.md`. No escribí código ni tests, y no toqué `core/errors.py`.
+
+## Cambios
+- **`docs/especificacion-tasks.md`** (nuevo, en español):
+  - Incluye objetivo, alcance, modelos `TaskCreate` y `Task`, los cuatro endpoints, las reglas de idempotencia y las decisiones de diseño.
+  - La tabla de criterios de aceptación tiene 28 casos, de CA-01 a CA-28. Se agrupan en creación (CA-01 a CA-15), idempotencia (CA-16 a CA-21) y consulta (CA-22 a CA-28).
+- **`CLAUDE.md`**: añadí la sección "Recurso `tasks/`" antes de "Cómo ejecutar". Resume las reglas que pediste y no cambié nada más.
+
+## Decisiones tomadas contigo
+- **409:** `core/errors.py` solo tiene `already_exists`, que genera "… ya existe: …", así que no encaja con la idempotencia. Quedó documentado un `conflict(message)` nuevo. Se añadirá al implementar, no ahora.
+- **Título:** se recorta y se mide después. `"  ab  "` da 422, y `"  Revisar  "` se guarda como `"Revisar"`.
+- **Idempotencia:**
+  - La clave es global para `POST /tasks`.
+  - Se compara el cuerpo ya normalizado, así que omitir `priority` equivale a enviar `3`.
+  - Solo se guardan las peticiones que terminan en 201.
+
+## Dudas y riesgos
+1. **Zona horaria de "hoy":** `current_date()` usaría la fecha local del servidor. Cerca de medianoche, la misma petición puede dar 201 o 422 según la zona. Hay que decidir si se fija UTC.
+2. **`Idempotency-Key` vacía:** no está definido qué hacer. Propongo tratarla como ausente.
+3. **Reintento con fecha ya vencida:** busco la clave antes de las reglas de dominio. Así un reintento legítimo devuelve 201 aunque `due_date` ya sea pasada. Es una decisión mía y está en el documento.
+4. **Cuerpo mal formado con clave repetida:** FastAPI devuelve 422
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-24 20:33:49 · Prompt
+
+```text
+<pasted_content id="d10f">
+4. Correcto que dé 422. Un cuerpo inválido no es un reintento válido. Solo documéntalo.
+  5. Rechazarlo con 422 usando Field(gt=0) en el body y Query(gt=0) en el filtro. Un id ≤ 0 es un dato mal formado, no un usuario inexistente.
+  6. De acuerdo: va a “Limitaciones conocidas”.
+  7. Correcto. No es una decisión, es parte del plan de implementación. Que quede anotado en la especificación.
+  8. De acuerdo. Extiende el estilo sin romperlo y da trazabilidad del criterio al test.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 20:34:16 · Respuesta
+
+Actualicé `docs/especificacion-tasks.md` con tus puntos 4 a 7. El punto 8 no requería cambios y `CLAUDE.md` quedó igual.
+
+- **Punto 4 (cuerpo inválido con clave repetida):** documenté la sección "Orden de validación (decidido)". Primero va el formato (422), luego la búsqueda de la clave (201 o 409), después las reglas de dominio (422 o 404) y al final la creación.
+- **Punto 5 (id ≤ 0):**
+  - `assignee_id` en el body usa `Field(gt=0)` y el filtro de `GET /tasks` usa `Query(gt=0)`. Un valor ≤ 0 da 422.
+  - Añadí dos criterios: CA-29 (body) y CA-30 (filtro). Los puse con números nuevos al final de sus tablas, para no renumerar los demás. Quedan 30 criterios en total.
+- **Punto 6:** el almacén de claves sin caducidad y la falta de atomicidad pasaron a una sección "Limitaciones conocidas".
+- **Punto 7:** añadí una sección "Plan de implementación" con estos pasos:
+  - Añadir `conflict()` a `core/errors.py`.
+  - Crear el paquete `tasks/`.
+  - Montar el router en `main.py`.
+  - Llamar `tasks.repository.reset()` en la fixture de `conftest.py`.
+  - Escribir `tests/test_tasks.py` para CA-01 a CA-30, sustituyendo `current_date()` para fijar "hoy".
+
+Siguen abiertas tres cosas que no mencionaste:
+- La zona horaria de "hoy" (local o UTC).
+- La `Idempotency-Key` vacía, que propongo tratar como ausente.
+- Mi decisión de buscar la clave antes de las reglas de dominio, para que un reintento válido no falle cuando la fecha ya pasó. Está escrita así en el documento y, si te parece bien, queda como decidida.
+
+¿Las confirmas, y empiezo con la implementación?
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+
+---
+
+## 2026-10-24 20:34:40 · Prompt
+
+```text
+<pasted_content id="d10f">
+Decisiones sobre las dudas:
+
+1. "Hoy" se calcula en la zona America/Mexico_City (constante en tasks/service.py,
+   usando zoneinfo). Agrega `tzdata` a requirements.txt porque en Windows zoneinfo
+   no trae la base de zonas horarias. Documenta el motivo en la especificación.
+2. Idempotency-Key vacía o de solo espacios se trata como ausente.
+3. De acuerdo: el reintento con la misma clave devuelve la respuesta original aunque
+   due_date ya haya vencido. Documéntalo como comportamiento intencional.
+4. De acuerdo: un cuerpo inválido devuelve 422 antes de evaluar la clave. Documéntalo.
+5. assignee_id debe ser > 0: usa Field(gt=0) en TaskCreate y Query(gt=0) en el filtro
+   de GET /tasks, para que 0 o negativos den 422 y no 404. Agrega los CA
+   correspondientes.
+6. De acuerdo: agrégalo en "Limitaciones conocidas" junto con la falta de caducidad
+   y que las claves son globales.
+7. Anota en la especificación, como pasos de implementación, montar el router en
+   main.py y llamar tasks.repository.reset() en la fixture de conftest.py.
+8. De acuerdo con los docstrings CA-xx.
+
+Actualiza docs/especificacion-tasks.md y CLAUDE.md con estas decisiones. Sigue sin
+escribir código. Al terminar, muéstrame la tabla final de criterios de aceptación.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 20:35:42 · Respuesta
+
+Ahora leo el final del documento para reemplazar las secciones de dudas y limitaciones.
+
+Voy a renumerar los criterios en orden secuencial (aún no hay tests que dependan de los números) y a reescribir las secciones finales.
+
+Actualicé `docs/especificacion-tasks.md`, `CLAUDE.md` y `requirements.txt` con tus ocho decisiones. No escribí código ni tests. No ejecuté `pip install`, así que `tzdata` queda solo declarado.
+
+- **Zona horaria:** "hoy" se calcula en `America/Mexico_City`, con una constante en `tasks/service.py` y `zoneinfo`. Añadí `tzdata>=2024.1` a `requirements.txt` y documenté el motivo: en Windows `zoneinfo` no trae la base de zonas.
+- **Clave vacía o de solo espacios:** se trata como ausente.
+- **Reintento con fecha vencida:** devuelve la respuesta original, y quedó marcado como intencional.
+- **Cuerpo inválido con clave ya usada:** da 422 antes de evaluar la clave. Está en la sección "Orden de validación".
+- **`assignee_id`:** `Field(gt=0)` en el body y `Query(gt=0)` en el filtro, así que 0 o negativos dan 422.
+- **Limitaciones conocidas:** quedaron tres: claves globales, sin caducidad y sin atomicidad.
+- **Plan de implementación:** incluye montar el router en `main.py` y llamar `tasks.repository.reset()` en la fixture de `conftest.py`.
+- **Criterios de aceptación:** los renumeré en orden, porque ningún test depende aún de los números. Son 34 y añadí cuatro: CA-13 (zona horaria), CA-22 (422 antes que la clave), CA-23 (reintento con fecha vencida) y CA-26 (clave vacía).
+
+## Tabla final de criterios de aceptación
+
+| ID | Caso | Petición | Respuesta esperada |
+|---|---|---|---|
+| CA-01 | Crear con solo los campos obligatorios | `POST /tasks` con título y `due_date` = hoy+1 | 201; `id` y `created_at`, `priority` = 3, `assignee_id` = null |
+| CA-02 | Crear con todos los campos | `POST /tasks` con `description`, `priority: 5`, `assignee_id: 1` y título con espacios en los extremos | 201; título recortado |
+| CA-03 | Valores en los límites | Título de 3 y de 120
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\requirements.txt`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+- `C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\scratchpad\tail.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-24 20:47:09 · Prompt
+
+```text
+<pasted_content id="d10f">
+Antes de implementar, revisa @docs/especificacion-tasks.md como si fueras a escribir
+y ejecutar los tests. No modifiques nada todavía.
+
+1. Para cada CA, describe en una línea cómo lo probarías: qué fixture o mock
+   necesitas y qué verificas. Marca los que no se puedan probar con el diseño actual.
+2. Aislamiento: ¿hay estado que pueda filtrarse de un test a otro? Revisa todo lo
+   que se guarda en memoria, no solo las tareas.
+3. Combinaciones: ¿qué pasa cuando fallan dos reglas a la vez? Revisa cada par de
+   reglas de dominio y di si la respuesta está definida.
+4. Determinismo: ¿algún resultado depende del reloj, del orden de ejecución o del
+   entorno? ¿Se puede controlar desde el test?
+
+Lista los problemas encontrados con una propuesta de solución para cada uno.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 20:50:03 · Respuesta
+
+Reviso dos cosas del entorno antes de responder (solo lectura): si `tzdata` está instalado en el `.venv` y qué versión de Python y Pydantic usa.
+
+No modifiqué nada. Repasé la especificación como si fuera a escribir y ejecutar los tests, y encontré 16 problemas. Tres son graves:
+- **El almacén de claves de idempotencia no tiene ubicación ni `reset()`**, así que las claves pueden filtrarse de un test a otro.
+- **CA-13 no se puede probar con el diseño actual.**
+- **`tzdata` no está instalado en `.venv`**: hoy la suite entera fallaría al importar.
+
+## 1. Cómo probaría cada CA
+
+Doy por hecho tres piezas comunes:
+- **`client`**: la fixture que ya existe.
+- **`today`**: fixture autouse en `test_tasks.py` que sustituye `tasks.service.current_date` con `monkeypatch` y deja cambiar la fecha dentro de un test.
+- **`valid_payload(**cambios)`**: helper que arma un cuerpo válido a partir de la fecha fijada.
+
+✅ se puede probar · ⚠️ se puede probar, pero tiene un problema · ❌ no se puede probar tal como está
+
+| CA | Cómo lo probaría | Estado |
+|---|---|---|
+| CA-01 | POST mínimo; verifico 201, `id == 1`, que exista `created_at`, `priority == 3` y `assignee_id is None` | ⚠️ P8 |
+| CA-02 | POST completo con `assignee_id: 1` (usuario semilla); verifico cada campo y el título recortado | ⚠️ P15 |
+| CA-03 | `parametrize` con 5 variantes en los límites; 201 en cada una | ✅ |
+| CA-04 a CA-08 | POST con el campo inválido; 422 de Pydantic. No hace falta mock | ✅ |
+| CA-09 | POST sin `due_date`; 422 | ✅ |
+| CA-10 | POST con `"24/10/2026"`; 422 | ⚠️ P11 |
+| CA-11 | `today` fijo; `due_date` = hoy−1; 422 y mensaje de dominio | ✅ |
+| CA-12 | `today` fijo; `due_date` = hoy; 201 | ✅ |
+| CA-13 | No hay forma de fijar el *instante* que lee `current_date()` | ❌ P2 |
+| CA-14, CA-15 | `priority` 0 y 6; 422 | ✅ |
+| CA-16 | `assignee_id: 999`; 404 con "usuario no encontrado" | ✅ |
+| CA-17 | `parametrize` con 0 y −1; 422 | ✅ |
+| CA-18 | Dos POST con `k1`; mismo `id` y mismo `created_at`; `GET /tasks` con 
+
+[… respuesta recortada …]
+
+---
+
+## 2026-10-24 20:58:50 · Prompt
+
+```text
+<pasted_content id="d10f">
+Aplica todas las propuestas en la especificación y en CLAUDE.md, con estos ajustes:
+
+- P7: opción (b). 
+- P11: strict=True solo en priority y assignee_id. No lo apliques a due_date: con
+  FastAPI el cuerpo llega como dict de Python y en modo estricto podría rechazarse
+  también "2026-10-24". Anota en "Limitaciones conocidas" que due_date acepta
+  timestamps Unix. Agrega el CA del booleano para priority y assignee_id.
+
+Sigue sin escribir código. Al terminar, muéstrame un resumen de los cambios y la
+lista final de CA.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 21:01:07 · Respuesta
+
+Voy a reescribir la especificación completa, porque los cambios tocan casi todas las secciones, y a leer `CLAUDE.md` para editar solo su sección de `tasks`.
+
+Apliqué las 16 propuestas con tus dos ajustes en `docs/especificacion-tasks.md` y en la sección `tasks/` de `CLAUDE.md`. No escribí código y no toqué nada más.
+
+## Cambios
+
+**Especificación:**
+- **Fecha actual (P2, P3, P10):** `current_date()` se apoya en una función pura nueva, `local_date(instant)`, que es la que prueba CA-14. La zona queda en la constante `BUSINESS_TIMEZONE`. El plan empieza por `pip install`, porque falta `tzdata`. Nadie debe importar `current_date` con `from …`.
+- **Mensaje neutro (P7, opción b):** `not_found` pasa a "No se encontró <recurso>: <id>" en todos los recursos. Lo marqué como cambio transversal: también cambia el mensaje de `users` y el assert de `tests/test_users.py`.
+- **Modo estricto (P11 ajustado):** `strict=True` solo en `priority` y `assignee_id`, y solo en el cuerpo, no en ruta ni consulta. Que `due_date` acepte timestamps Unix quedó en "Limitaciones conocidas" con tu motivo.
+- **Repositorio (P1, P8):** `tasks/repository.py` guarda las tareas y el registro de claves, sin datos semilla, y `reset()` vacía las dos cosas.
+- **Orden de validación (P4, P5):** formato → clave → fecha → asignado. Añadí una nota con las consecuencias cuando fallan dos reglas a la vez.
+- **Normalización (P12):** `title` y `description` se recortan, y una `description` vacía se guarda como `null`. Los campos extra se ignoran.
+- **Ids y listados (P13, P14):** los listados salen en orden de creación, y `task_id` lleva `Path(gt=0)`.
+- **Nueva sección "Infraestructura de tests" (P9, P10):** imports con alias en `conftest.py`, la fixture `today` y el helper `valid_payload()`.
+- **Limitaciones (P16):** añadí la prioridad de la base de zonas del sistema.
+
+**`CLAUDE.md`:** reescribí solo las viñetas de "Recurso `tasks/`" para reflejar todo lo anterior. No toqué la sección general "Convenciones", aunque el c
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
