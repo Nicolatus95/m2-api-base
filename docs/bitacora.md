@@ -110,6 +110,7 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Iteración 3 · base del recurso | 7 | 54 | 0 | 86 % | `02-iteracion-1.png` |
 | Iteración 4 · crear y consultar | 52 | 9 | 0 | 98 % | `03-iteracion-2.png` |
 | Iteración 5 · idempotencia (verde) | 61 | 0 | 0 | 99 % | `04-verde.png` |
+| Iteración 6 · unitarios e integración | 67 | 0 | 0 | 99 % (`tasks/` 100 %) | `05-suite-completa.png` |
 
 ### Iteraciones
 
@@ -326,6 +327,20 @@ Una fila por iteración, con el comando de la convención de evidencias.
 - **Evidencia:** `capturas/05-suite-completa.png`
 - **Commit:** `test(tasks): unitarios del servicio e integración entre recursos`
 
+### Iteración 7 · Mutation testing con Cosmic Ray (primera corrida)
+
+- **Objetivo:** medir si los tests detectan errores, no solo si ejecutan el código.
+- **Modelo:** Sonnet 5.5, esfuerzo high.
+- **Prompt:** "Prompt E", ver `bitacora-prompts.md`.
+- **Configuración:** `cosmic-ray>=8.7` (instalada la 8.7.0) en `requirements.txt`;
+  `cosmic-ray.toml` muta solo `tasks/`, `timeout = 30`,
+  `test-command = "pytest -x -q --tb=no -p no:cacheprovider"`; la sesión
+  (`cosmic-ray.sqlite`) va en `.gitignore`.
+- **Resultado:** 188 mutantes · **96 muertos (51 %)** · 92 sobrevivientes · 0 con
+  timeout. Detalle y análisis en la sección 3.
+- **Aceptado / rechazado y por qué:** pendiente de mi decisión sobre los
+  sobrevivientes.
+
 ---
 
 ## 3. Tests y cobertura
@@ -335,19 +350,65 @@ Una fila por iteración, con el comando de la convención de evidencias.
 - **Mocks utilizados:**
 - **Integración:**
 - **Cobertura final:**
-- **Mutation testing:**
+- **Mutation testing (Cosmic Ray 8.7, solo `tasks/`):**
+
+  Primera corrida: 188 mutantes, 96 muertos (51 %), 92 sobrevivientes. Claude Code
+  clasificó cada sobreviviente como (a) hueco real o (b) equivalente, y verificó sus
+  afirmaciones con pruebas puntuales:
+
+  | Grupo | Mutantes | Qué cambia | Clasificación | Por qué |
+  |---|---|---|---|---|
+  | 1 | 88 | El `\|` de las anotaciones de tipo (`str \| None`) por otro operador (`+`, `&`, `^`…) | (b) Equivalente | En Python 3.14 las anotaciones de función no se evalúan al definirla (`def f(x: int + None)` no falla). En 3.13 o anterior estos mutantes fallarían al importar y morirían. |
+  | 2 | 1 | Quitar `@classmethod` del validador de `description` | (b) Equivalente | Pydantic envuelve el validador por sí mismo; verificado: sin el decorador, `""` sigue dando `None`. |
+  | 3 | 2 | `_next_id = 1` pasa a `0` o `2` en `repository.py` | (a) Hueco real | `reset()` fija `_next_id = 1` antes de cada test, así que ningún test ve el valor inicial. `users/repository.py` evita la duplicación llamando a `reset()` al importar; `tasks` no. |
+  | 4 | 1 | `==` pasa a `is` al filtrar por `assignee_id` | (a) Hueco real, bajo riesgo | CPython reutiliza los enteros hasta 256, así que con los ids de los tests (1–5) `is` funciona igual. Con un usuario de id > 256 el filtro devolvería siempre una lista vacía. |
+
+  Sin los 89 equivalentes: **96 de 99 mutantes que pueden morir (97 %)**.
+
+  Evidencia: reporte navegable `mutacion/reporte-inicial.html` y capturas:
+  - `capturas/06-mutacion-inicial.png`: resumen (188 mutantes, 92 sobrevivientes).
+  - `capturas/07-mutante-sobreviviente.png`: job 61, `==` → `is` en
+    `list_by_assignee`. **Sobrevive**: todos los tests pasan.
+  - `capturas/08-mutante-muerto.png`: job 60, `==` → `>=` en la misma línea.
+    **Muere**: lo detecta `test_list_tasks_filtra_por_usuario_con_tareas`.
+  - Misma línea, dos mutantes: uno se detecta y el otro se escapa. La diferencia
+    está en los datos del test (ids pequeños), no en la línea cubierta.
+
+  **Lecciones:**
+  - El 100 % de cobertura convivía con 3 huecos reales que la cobertura no puede ver.
+  - Un mismo mutante es equivalente o no según la versión de Python (grupo 1): el
+    puntaje bruto engaña si no se analiza.
+  - El grupo 4 es un error que ningún test con ids pequeños detectaría nunca.
 - **Evidencia:**
 
 ---
 
 ## 4. Debugging y refactorización
 
+<!-- Plantilla por bug:
 ### Bug N · <descripción>
-
 - **Síntoma / stack trace:**
 - **Hipótesis propuestas por la IA:**
 - **Hipótesis correcta y fix aplicado:**
 - **Validación (tests):**
+-->
+
+### Bug 1 · El baseline de Cosmic Ray fallaba en silencio en Windows
+
+- **Síntoma:** con `test-command = "python -m pytest ..."`, el baseline de Cosmic Ray
+  fallaba sin ningún mensaje de error, aunque `pytest` pasaba en la terminal.
+- **Diagnóstico de la IA (Claude Code):** el proceso hijo no tenía las dependencias.
+  En Windows, `CreateProcess` busca `python` primero junto al proceso padre real (el
+  Python base, `C:\Python314`, sin FastAPI) y no en el `PATH` del entorno virtual.
+  Cosmic Ray solo muestra la salida estándar, así que el error de importación no se
+  veía.
+- **Fix aplicado:** usar `pytest` a secas en el `test-command` (el ejecutable
+  `pytest.exe` del `.venv` sí se resuelve por el `PATH`) y documentar el motivo en
+  `cosmic-ray.toml`.
+- **Validación:** el baseline pasa y la sesión completa corre sin timeouts.
+- **Nota:** este bug fue de herramientas, no del código de la feature, y la IA lo
+  resolvió sola dentro del prompt. No hubo un intercambio de "hipótesis antes que
+  soluciones" conmigo; eso queda para el bug de la aplicación.
 
 ### Refactorización N · <code smell>
 

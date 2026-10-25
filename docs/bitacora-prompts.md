@@ -792,3 +792,112 @@ Me detengo aquí a esperar tu siguiente instrucción.
 
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-24 23:04:30 · Prompt
+
+```text
+<pasted_content id="d10f">
+Vamos a hacer mutation testing con Cosmic Ray (mutmut no funciona en Windows sin
+WSL). Antes de configurar nada, revisa su documentación para usar los comandos
+correctos de la versión que instales.
+
+1. Agrega cosmic-ray a requirements.txt e instálalo.
+2. Crea la configuración para mutar solo el paquete tasks/ (no core/, users/,
+   legacy/ ni migrations/), con un test-command que corra la suite con pytest y un
+   timeout razonable. Guarda la configuración en el repo y agrega la base de
+   datos de la sesión a .gitignore.
+3. Corre el baseline, ejecuta la sesión y muéstrame el reporte: total de
+   mutantes, muertos, sobrevivientes y porcentaje.
+4. Para cada mutante sobreviviente, muéstrame el cambio exacto y explícame si es
+   (a) un hueco real en los tests o (b) un mutante equivalente, que no cambia el
+   comportamiento. NO agregues tests todavía: espera mi decisión.
+
+Detente al terminar el paso 4.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 23:07:23 · Respuesta
+
+Primero instalo `cosmic-ray` para saber qué versión toca, y cargo la herramienta para leer su documentación.
+
+Se instaló la versión 8.7.0. Ahora leo la documentación y la ayuda de esa versión.
+
+`git status` muestra solo cambios en `docs/`, así que `tasks/` ya está confirmado y puedo verificar con `git diff` que las mutaciones no dejan restos. Lo compruebo.
+
+Todo está confirmado en git. Añado la dependencia, la configuración y la entrada de `.gitignore`.
+
+El baseline falló sin mensaje de error. Reproduzco el `test-command` a mano para ver qué pasa.
+
+Directamente, la suite pasa con ese mismo comando. Miro cómo decide Cosmic Ray que el baseline falla.
+
+El comando falla con salida vacía, y Cosmic Ray no lee `stderr`. Replico su ejecución exacta (con `PYTHONDONTWRITEBYTECODE=1`) capturando `stderr` para ver el motivo real.
+
+La causa es `ModuleNotFoundError: fastapi`: el proceso hijo no ve el entorno virtual. Aclaro si es por cómo lo lanza Cosmic Ray o por mi propio script (usé `-I`).
+
+`pytest` directo funciona (el `pyproject.toml` ya resuelve el `pythonpath`). Ajusto el `test-command` y dejo el motivo anotado en la configuración.
+
+El baseline pasa y hay 188 mutantes planificados. Lanzo la ejecución en segundo plano.
+
+La sesión de mutación está en marcha; espero a que termine.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\requirements.txt`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\.gitignore`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\cosmic-ray.toml`
+
+---
+
+## 2026-10-24 23:12:28 · Prompt
+
+```text
+<task-notification>
+<task-id>b0heib49g</task-id>
+<tool-use-id>toolu_01QLTJGZUtKqHMnvcUuxzcvR</tool-use-id>
+<output-file>C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\tasks\b0heib49g.output</output-file>
+<status>completed</status>
+<summary>Background command "Execute all mutants against the test suite" completed (exit code 0)</summary>
+</task-notification>
+```
+
+### 2026-10-24 23:13:47 · Respuesta
+
+Terminó: 188 mutantes, 96 muertos y 92 supervivientes (48,94 %). Compruebo también que el árbol quedó intacto y miro el código exacto de cada superviviente.
+
+Corrí la sesión completa y no añadí ningún test. El 48,94 % de supervivientes sale inflado: 89 de los 92 son equivalentes y los tres restantes son huecos reales.
+
+## Resultado
+
+| | Mutantes | % |
+|---|---|---|
+| Total | 188 | 100 % |
+| Muertos | 96 | 51,06 % |
+| Supervivientes | 92 | 48,94 % |
+| Incompetentes o con timeout | 0 | 0 % |
+
+Si se descartan los 89 equivalentes, quedan 99 mutantes que pueden morir, y 96 de ellos murieron (96,97 %). Los 92 supervivientes se agrupan en cuatro grupos.
+
+## Los supervivientes
+
+**Grupo 1: 88 mutantes. El `|` de las anotaciones se cambia por otro operador. (b) Equivalentes.**
+Cada operador se aplica a 8 anotaciones, y los 11 operadores son `+ & ^ / // << % * ** >> -`:
+
+| Archivo | Línea | Código original | Ejemplo del cambio |
+|---|---|---|---|
+| `repository.py` | 18 | `description: str \| None,` | `str + None` |
+| `repository.py` | 21 | `assignee_id: int \| None,` | `int + None` |
+| `repository.py` | 38 | `-> Task \| None` | `Task + None` |
+| `repository.py` | 50 | `-> tuple[TaskCreate, int] \| None` | `tuple[…] + None` |
+| `schemas.py` | 23 | `value: str \| None` | `str + None` |
+| `schemas.py` | 23 | `-> str \| None` | `str + None` |
+| `service.py` | 31 | `idempotency_key: str \| None = None` | `str + None` |
+| `service.py` | 57 | `assignee_id: int \| None = None` | `int + None` |
+
+Esta clasificación vale solo para Python 3.14. Aquí las anotaciones de función no se evalúan al definirla, y lo comprobé: `def f(x: int + None)` se define sin error. Ningún test ni FastAPI las evalúa, porque no son rutas. En Python 3.13 o anterior, estos mutantes fallarían al importar y morirían.
+
+**Grupo 2: 1 mutante. Se quita `@classmethod` en `schemas.py:22`. (b) Equivalente.**
+Pydantic envuelve el validador por sí mismo cuando el primer parámetro se llama `cls`. Lo verifiqué: sin `@classmet
+
+[… respuesta recortada …]

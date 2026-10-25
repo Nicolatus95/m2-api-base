@@ -1,0 +1,18 @@
+# Mutation testing con Cosmic Ray: solo el paquete tasks/.
+# Ejecutar con el entorno virtual activo (su carpeta Scripts debe estar en el PATH).
+# El test-command usa `pytest` y no `python -m pytest`: en Windows, CreateProcess
+# busca `python` primero junto al proceso padre real (el Python base, sin las
+# dependencias) y no en el PATH; `pytest.exe` sí se resuelve por el PATH.
+#   cosmic-ray baseline cosmic-ray.toml
+#   cosmic-ray init cosmic-ray.toml cosmic-ray.sqlite
+#   cosmic-ray exec cosmic-ray.toml cosmic-ray.sqlite
+#   cr-report cosmic-ray.sqlite --show-pending
+# Las mutaciones se aplican sobre los archivos en disco: confirmar (commit) antes.
+[cosmic-ray]
+module-path = "tasks"
+timeout = 30.0
+excluded-modules = []
+test-command = "pytest -x -q --tb=no -p no:cacheprovider"
+
+[cosmic-ray.distributor]
+name = "local"
