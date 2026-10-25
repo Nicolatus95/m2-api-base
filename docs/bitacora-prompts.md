@@ -1462,3 +1462,187 @@ def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
 
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\repository.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
+
+---
+
+## 2026-10-25 11:56:05 · Prompt
+
+```text
+<pasted_content id="d10f">
+Fase de documentación. No cambies comportamiento ni tests.
+
+1. Docstrings (en español, como el resto del proyecto):
+   - Las funciones públicas de tasks/service.py que no tengan (create_task,
+     get_task, list_tasks): qué hacen, errores que lanzan y en qué orden.
+   - Las rutas de tasks/routes.py: FastAPI usa el docstring como descripción en
+     Swagger, así que escríbelas pensando en quien consume la API.
+   - En tasks/schemas.py, agrega ejemplos (json_schema_extra o examples en Field)
+     para que Swagger muestre un cuerpo de ejemplo válido de TaskCreate.
+
+2. README.md:
+   - Agrega los endpoints de tasks a la tabla.
+   - Sección "Recurso tasks": reglas de validación, tabla de códigos de respuesta
+     (201, 404, 409, 422), cómo funciona Idempotency-Key, y ejemplos de petición
+     y respuesta (con curl y con Invoke-RestMethod de PowerShell).
+   - En "Tests y calidad": cómo correr Cosmic Ray en Windows (entorno activo,
+     pytest en el PATH, cr-filter-operators, cr-html) y dónde quedan los reportes.
+   - Una sección corta para onboarding: estructura del proyecto y enlaces a
+     docs/especificacion-tasks.md, docs/bitacora.md y CLAUDE.md.
+
+3. CHANGELOG.md nuevo (formato Keep a Changelog) con la versión 0.2.0 de hoy:
+   Añadido, Cambiado (incluye el nuevo mensaje de not_found, visible para quien
+   consume la API) y Deuda técnica conocida (repository.add con los campos
+   repetidos, punto 3 de la revisión de code smells).
+
+4. Pendientes menores:
+   - main.py: título "API de usuarios y tareas" y versión 0.2.0; misma versión
+     en pyproject.toml.
+   - tests/conftest.py: el docstring de la fixture dice "datos semilla", pero
+     tasks arranca vacío.
+   - cosmic-ray.toml: el comentario dice que todos los | son anotaciones que no
+     se evalúan, pero las de routes.py sí las evalúa FastAPI; aclara que el
+     filtro también oculta esos mutantes (22 en la primera corrida) y por qué
+     se acepta.
+   - CLAUDE.md, "Cómo ejecutar": agrega los comandos de Cosmic Ray.
+
+Al terminar ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y
+ruff check ., y muéstrame un resumen de los cambios por archivo. Detente.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 11:57:32 · Respuesta
+
+La documentación está completa, sin cambios de comportamiento ni de tests. La suite sigue en 73 tests y `ruff check .` no encuentra nada. Con `app.openapi()` comprobé que el título y la versión son los nuevos, que `TaskCreate` lleva el ejemplo y que el docstring de la ruta aparece en la descripción.
+
+```
+tasks\routes.py      14  0  100%     tasks\service.py   45  0  100%
+tasks\schemas.py     23  0  100%     main.py             9  1   89%  (línea 18, /health)
+TOTAL               522  1   99%     73 passed in 0.69s     ruff: All checks passed!
+```
+
+## Cambios por archivo
+
+- **`tasks/service.py`**: docstrings en `create_task`, `get_task` y `list_tasks`.
+  - `create_task` documenta el orden de las reglas: clave de idempotencia (409 o respuesta original), fecha pasada (422) y asignado inexistente (404). También dice que un fallo no consume la clave.
+  - `list_tasks` documenta que primero comprueba el usuario (404) y luego filtra.
+- **`tasks/routes.py`**: docstring en las tres rutas, escrito para quien consume la API, con los códigos 200/201, 404, 409 y 422 y cuándo ocurre cada uno. `create_task` explica `Idempotency-Key`.
+- **`tasks/schemas.py`**: `TaskCreate` tiene `json_schema_extra` con un cuerpo de ejemplo válido. Pydantic combina esa configuración con la de `TaskBase`, así que el recorte de espacios sigue activo.
+- **`README.md`**:
+  - Tres filas nuevas en la tabla de endpoints.
+  - Sección "Recurso `tasks`": reglas de validación, tabla de códigos, `Idempotency-Key` y ejemplos con curl y `Invoke-RestMethod`, con las respuestas 201, 404 y 409 y una nota sobre el error 4xx en PowerShell.
+  - En "Tests y calidad": cómo correr Cosmic Ray en Windows (entorno activo, `pytest` en el PATH, `cr-filter-operators` y `cr-html`), dónde quedan los resultados y el último resultado (205/121/84/82/2).
+  - Sección de onboarding con la estructura del proyecto y enlaces a `CLAUDE.md`, la especificación, `docs/bitacora.md` y el `CHANGELOG`.
+- **`CHANGELOG.md`** (nuevo): versión 0.2.0 de
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\schemas.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\main.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\pyproject.toml`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\conftest.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\cosmic-ray.toml`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\.gitignore`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\README.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CHANGELOG.md`
+
+---
+
+## 2026-10-25 12:01:29 · Prompt
+
+```text
+<pasted_content id="d10f">
+Tres ajustes:
+
+1. CHANGELOG: en "Cambiado" deja solo lo que afecta a quien ya usaba la 0.1.0 (el
+   mensaje de not_found y el título). La regla de formato de due_date va en
+   "Añadido" (tasks no existía en 0.1.0), y quita las refactorizaciones internas
+   (IdempotencyRecord, _replay, tests): no le importan a quien consume la API.
+2. README: cambia "cr-html ... > cosmic-ray-report.html" por
+   "cr-html cosmic-ray.sqlite | Out-File -Encoding utf8 <ruta>", porque en Windows
+   PowerShell ">" guarda en UTF-16. Menciona que los reportes del reto están en
+   docs/mutacion/ (inicial, final y refactor).
+3. Cambia la fecha de los ejemplos (README y Swagger) a 2030-12-31 para que no
+   queden en el pasado.
+
+Después ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y ruff check .
+y detente.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 12:02:01 · Respuesta
+
+Hice los tres ajustes. La suite pasa (73 tests, `tasks/` al 100 %, lo único sin cubrir sigue siendo `/health` en `main.py:18`) y `ruff check .` no encuentra nada.
+
+1. **`CHANGELOG.md`**
+   - "Cambiado" tiene ahora solo dos entradas: el mensaje de `not_found` y el título "API de usuarios y tareas".
+   - La regla de formato de `due_date` pasó a "Añadido".
+   - Quité `IdempotencyRecord`, `_replay`, `_require_user` y lo de los tests.
+2. **Reporte HTML**
+   - `README.md` usa ahora `cr-html cosmic-ray.sqlite | Out-File -Encoding utf8 cosmic-ray-report.html`, con una nota sobre el `>` y UTF-16 en PowerShell 5.1.
+   - Mencioné `docs/mutacion/` con `reporte-inicial.html`, `reporte-final.html` y `reporte-refactor.html`; existen los tres.
+   - También cambié la misma línea en `CLAUDE.md`, que tenía el `>`; no lo pediste.
+3. **Fecha de los ejemplos:** pasó a `2030-12-31` en el ejemplo de Swagger (`tasks/schemas.py`) y en los tres ejemplos del README (curl, PowerShell y la respuesta JSON). Quité la nota de que las fechas deben ajustarse; sigue la advertencia general de que deben ser de hoy o posteriores.
+
+Los cambios siguen sin confirmar en git.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\schemas.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\README.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CHANGELOG.md`
+
+---
+
+## 2026-10-25 12:15:40 · Prompt
+
+```text
+<pasted_content id="d10f">
+En Swagger, el 409 de POST /tasks aparece como "Undocumented": FastAPI solo
+documenta solo el 201 y el 422. Agrega `responses=` en las rutas de
+tasks/routes.py para declarar formalmente los errores de cada una:
+- POST /tasks: 404 (asignado inexistente) y 409 (conflicto de idempotencia)
+- GET /tasks/{task_id}: 404
+- GET /tasks: 404 (usuario del filtro inexistente)
+Cada uno con una descripción breve en español y un ejemplo del cuerpo
+({"detail": "..."}) con el mensaje real. Sin cambios de comportamiento.
+
+Ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y ruff check . y
+detente.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 12:16:12 · Respuesta
+
+Ruff marca dos líneas largas; las parto.
+
+Las rutas de `tasks` declaran ahora sus errores con `responses=`, así que Swagger ya no muestra el 409 como "Undocumented". Solo toqué `tasks/routes.py`. La suite pasa (73 tests, `tasks/` al 100 %, solo falta `/health` en `main.py:18`) y `ruff check .` no encuentra nada.
+
+Ruff marcó dos líneas de más de 100 caracteres (E501) en la primera pasada. Las partí en varias líneas, sin cambiar nada más, y repetí la suite y el linter.
+
+Con `app.openapi()` comprobé lo que aparece en la documentación:
+
+| Ruta | Código | Descripción | Ejemplo de `detail` |
+|---|---|---|---|
+| `GET /tasks` | 404 | El usuario del filtro no existe | `No se encontró usuario: 999` |
+| `GET /tasks/{task_id}` | 404 | La tarea no existe | `No se encontró tarea: 999` |
+| `POST /tasks` | 404 | El usuario de `assignee_id` no existe | `No se encontró usuario: 999` |
+| `POST /tasks` | 409 | La `Idempotency-Key` ya se usó con un cuerpo distinto | `La clave de idempotencia ya se usó con un cuerpo distinto` |
+
+- **Helper nuevo:** `_error_response(description, detail)` arma cada entrada de `responses=` y tiene su docstring.
+- **Mensaje del 409:** el ejemplo toma el texto de `service.IDEMPOTENCY_CONFLICT_MESSAGE`, así que el ejemplo no se desfasa si cambia el mensaje real.
+- **Ejemplos del 404:** son literales, porque ese mensaje se arma con el recurso y el id.
+- **Sin modelo de error:** declaré las respuestas solo con descripción y ejemplo, sin un modelo Pydantic de error. El esquema de esas respuestas queda vacío en Swagger; si lo quieres tipado, habría que añadir un modelo.
+- **Cosmic Ray no vuelto a ejecutar:** `routes.py` ganó dos líneas ejecutables, así que la próxima sesión generará mutantes nuevos sobre ellas, incluidos literales del ejemplo y los códigos 404/409.
+- **Sin commit:** los cambios siguen sin confirmar.
+
+Me detengo aquí.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\routes.py`

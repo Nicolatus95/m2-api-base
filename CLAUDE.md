@@ -95,6 +95,19 @@ pytest --cov=. --cov-report=term-missing   # cobertura
 ruff check .                       # linter
 ```
 
+Mutation testing de `tasks/` con Cosmic Ray (entorno virtual activo y `.venv\Scripts`
+en el PATH; configuración y motivos en `cosmic-ray.toml`; los mutantes se aplican
+sobre los archivos en disco, así que conviene hacer commit antes):
+
+```bash
+cosmic-ray baseline cosmic-ray.toml
+cosmic-ray init cosmic-ray.toml cosmic-ray.sqlite
+cr-filter-operators cosmic-ray.sqlite cosmic-ray.toml
+cosmic-ray exec cosmic-ray.toml cosmic-ray.sqlite
+cr-report cosmic-ray.sqlite --show-pending
+cr-html cosmic-ray.sqlite | Out-File -Encoding utf8 cosmic-ray-report.html   # PowerShell: no usar ">" (UTF-16)
+```
+
 ## Fuera de límites
 
 - `migrations/` y `legacy/` — no modificar.

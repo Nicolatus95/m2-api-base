@@ -9,7 +9,9 @@ from users import repository as user_repository
 
 @pytest.fixture(autouse=True)
 def _reset_data():
-    """Cada test arranca con los datos semilla y no contamina a los demás."""
+    """Cada test arranca con los datos iniciales y no contamina a los demás.
+
+    `users` vuelve a sus datos semilla; `tasks` vuelve vacío (sin semilla)."""
     user_repository.reset()
     task_repository.reset()
     yield

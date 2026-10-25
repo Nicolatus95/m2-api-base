@@ -31,6 +31,18 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     """Cuerpo de entrada para crear una tarea."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "title": "Revisar logs de producción",
+                "description": "Buscar errores 5xx de la última hora",
+                "due_date": "2030-12-31",
+                "priority": 4,
+                "assignee_id": 1,
+            }
+        }
+    )
+
     @field_validator("due_date", mode="before")
     @classmethod
     def due_date_is_iso_text(cls, value: object) -> object:

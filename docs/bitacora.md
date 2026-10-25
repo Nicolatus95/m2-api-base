@@ -656,9 +656,75 @@ reproducir → pedir hipótesis sin tocar código → verificar, corregir y vali
 
 ## 5. Documentación
 
-- [ ] Docstrings en funciones clave
-- [ ] README actualizado (endpoints, uso, pruebas)
-- [ ] CHANGELOG.md
+- [x] Docstrings en funciones clave
+- [x] README actualizado (endpoints, uso, pruebas)
+- [x] CHANGELOG.md
+
+### Iteración de documentación
+
+- **Modelo:** Sonnet 5.5, esfuerzo medium. Sin cambios de comportamiento ni de tests.
+- **Resultado:**
+  - **Docstrings** en las funciones públicas de `tasks/service.py` (con el orden de
+    las reglas y los errores que lanza cada una) y en las rutas de `tasks/routes.py`,
+    escritas para quien consume la API: FastAPI las muestra como descripción en
+    Swagger.
+  - **Ejemplo en Swagger:** `TaskCreate` lleva un cuerpo de ejemplo válido
+    (`json_schema_extra`).
+  - **README:** endpoints de `tasks` en la tabla; sección "Recurso tasks" con reglas
+    de validación, tabla de códigos de respuesta, `Idempotency-Key` y ejemplos con
+    `curl` e `Invoke-RestMethod`; cómo correr Cosmic Ray en Windows; sección de
+    onboarding con la estructura del proyecto y enlaces a `CLAUDE.md`, la
+    especificación, la bitácora y el CHANGELOG.
+  - **CHANGELOG.md** (Keep a Changelog): 0.2.0 con Añadido, Cambiado y Deuda técnica
+    conocida, más una entrada mínima de 0.1.0 como origen.
+  - **Pendientes menores:** título "API de usuarios y tareas" y versión 0.2.0 en
+    `main.py` y `pyproject.toml`; docstring de `conftest.py` corregido ("datos
+    semilla"); comentario de `cosmic-ray.toml` corregido (las anotaciones de
+    `routes.py` sí las evalúa FastAPI); comandos de Cosmic Ray en `CLAUDE.md`.
+  - Claude Code verificó con `app.openapi()` que el título, la versión, el ejemplo y
+    las descripciones aparecen en el esquema OpenAPI.
+- **Revisión (chat de Claude):**
+  - **CHANGELOG:** "Cambiado" incluía el formato de `due_date` (el recurso `tasks` no
+    existía en 0.1.0, así que no es un cambio para nadie) y refactorizaciones
+    internas (`IdempotencyRecord`, tests), que no le importan a quien consume la API.
+    → La regla de `due_date` pasa a "Añadido" y las refactorizaciones internas salen.
+  - **README:** el comando `cr-html ... > archivo.html` guarda en UTF-16 en Windows
+    PowerShell, el mismo problema que ya habíamos encontrado. → Usar
+    `Out-File -Encoding utf8` y mencionar los reportes de `docs/mutacion/`.
+  - **Fechas de los ejemplos:** `2026-12-31` queda en el pasado en dos meses y el
+    ejemplo de Swagger empezaría a dar 422 (Claude Code lo advirtió). → Usar una
+    fecha lejana, como `2030-12-31`.
+- **Aceptado / rechazado y por qué:** aceptado con los tres ajustes de arriba, ya
+  aplicados: "Cambiado" solo lista el mensaje de `not_found` y el título; el README
+  usa `Out-File -Encoding utf8` y apunta a los reportes de `docs/mutacion/`; los
+  ejemplos usan `2030-12-31`.
+- **Tests y linter:** 73/73 · `ruff check .`: sin errores.
+- **Evidencia:** `capturas/18-documentacion.png` (suite) y `capturas/19-swagger.png`
+  (`POST /tasks` en Swagger: descripción con los códigos de respuesta, header
+  `Idempotency-Key` y cuerpo de ejemplo). Para levantar el servidor usé
+  `--port 5050`: el 8000 dio `WinError 10013`, probablemente porque Windows reservó
+  ese rango al instalar WSL/Docker.
+  Prueba de punta a punta desde Swagger ("Try it out" con el ejemplo):
+  `capturas/20-swagger-respuesta.png`, **201** con la tarea creada (`id` y
+  `created_at` generados por el servidor).
+  Prueba de idempotencia en vivo: `capturas/21-swagger-409.png`, misma clave
+  (`prueba-1`) con otro título → **409** con el mensaje "La clave de idempotencia
+  ya se usó con un cuerpo distinto".
+- **Hallazgo en la prueba manual:** Swagger marcó el 409 como **"Undocumented"**.
+  FastAPI solo documenta por sí mismo el 201 y el 422; el 404 y el 409 aparecían en
+  la descripción, pero no como respuestas formales del esquema OpenAPI. Una prueba
+  manual encontró un hueco que los tests automáticos no podían ver.
+- **Corrección:** `responses=` en las tres rutas de `tasks/routes.py` (404 en las
+  tres, 409 en `POST /tasks`), cada una con descripción en español y un ejemplo
+  del `detail` real. Claude Code agregó un helper `_error_response` y tomó el
+  ejemplo del 409 de la constante del servicio, para que no se desfase si cambia el
+  mensaje. Lo verificó con `app.openapi()`. Ruff marcó dos líneas largas (E501) en
+  la primera pasada y las corrigió. 73 passed, `tasks/` al 100 %.
+  - No volví a correr Cosmic Ray: el cambio solo agrega metadatos de documentación.
+    Si se corre, los literales de esos ejemplos generarán mutantes que sobreviven,
+    porque no cambian el comportamiento de la API.
+  - Evidencia: `capturas/22-swagger-409-documentado.png`.
+- **Commit:** `docs: README, CHANGELOG 0.2.0, docstrings y respuestas documentadas en Swagger`
 
 ---
 

@@ -21,8 +21,16 @@ name = "local"
 # Filtro de operadores (se aplica después de `init`, con cr-filter-operators).
 # Excluye los mutantes que cambian el operador `|` por otro (+, &, ^, /, //, <<, %,
 # *, **, >>, -). En tasks/ todos los `|` son anotaciones de tipo (`X | None`).
-# En Python 3.14 las anotaciones de función no se evalúan al definirla, así que esos
-# mutantes no cambian el comportamiento (equivalentes) y solo inflan el resultado.
+# En Python 3.14 las anotaciones de función no se evalúan al definirla, así que casi
+# todos esos mutantes no cambian el comportamiento (equivalentes) y solo inflan el
+# resultado.
+# Excepción conocida: las anotaciones de los parámetros de routes.py (líneas 17 y 29)
+# sí las evalúa FastAPI al construir la ruta, y en la primera corrida esos mutantes
+# (22) morían. El filtro actúa por nombre de operador, no por archivo, y también los
+# oculta. Se acepta porque son pocos, porque cambiar esas anotaciones rompe de todos
+# modos los tests de rutas (422/200 de `assignee_id` y `Idempotency-Key`) y porque
+# separarlos exigiría filtros por línea que se desfasan con cada edición. Para
+# revisarlos, ejecutar una sesión sin el filtro (omitir cr-filter-operators).
 # Si se revisa este filtro, comprobar antes que `|` siga siendo solo de anotaciones.
 [cosmic-ray.filters.operators-filter]
 exclude-operators = ["core/ReplaceBinaryOperator_BitOr_.*"]
