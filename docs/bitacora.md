@@ -108,6 +108,7 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Iteración 2 · tests en rojo | 6 | 0 | 55 | 51 % | `01-tests-rojo.png` |
 | Iteración 3 · base del recurso | 7 | 54 | 0 | 86 % | `02-iteracion-1.png` |
 | Iteración 4 · crear y consultar | 52 | 9 | 0 | 98 % | `03-iteracion-2.png` |
+| Iteración 5 · idempotencia (verde) | 61 | 0 | 0 | 99 % | `04-verde.png` |
 
 ### Iteraciones
 
@@ -246,6 +247,35 @@ Una fila por iteración, con el comando de la convención de evidencias.
   cobertura 98 %.
 - **Evidencia:** `capturas/03-iteracion-2.png`
 - **Commit:** `test(tasks): Crear y consultar sin idempotencia` (6b8150a)
+
+### Iteración 5 · Idempotencia: suite en verde
+
+- **Objetivo:** implementar `Idempotency-Key` en `POST /tasks`.
+- **Modelo:** Sonnet 5.5, esfuerzo medium.
+- **Prompt:** "sigue" (iteración 3 del Prompt C), ver `bitacora-prompts.md` (21:49).
+- **Resultado:**
+  - `tasks/routes.py`: `POST /tasks` lee el header con `Header()` y lo pasa al servicio.
+  - `tasks/service.py`: `create_task(data, idempotency_key=None)` sigue el orden de la
+    especificación: clave vacía = ausente → clave registrada (mismo cuerpo normalizado
+    devuelve la tarea guardada; cuerpo distinto, `conflict` con el mensaje en la
+    constante `IDEMPOTENCY_CONFLICT_MESSAGE`) → fecha pasada → asignado → crear y
+    registrar la clave solo si todo salió bien.
+  - Actualizó el plan de la especificación (todo completado).
+  - **61 passed, 99 %.** Las únicas líneas sin cubrir son el cuerpo de `current_date()`
+    (los tests siempre la sustituyen) y `/health` en `main.py`, que ya existía.
+  - No modificó ningún test después de la iteración 0 y no reportó ninguno incorrecto.
+- **Revisión (chat de Claude):**
+  - La lógica es correcta y respeta el orden de validación.
+  - `create_task` ya mezcla tres responsabilidades (idempotencia, reglas de dominio y
+    creación) con `if` anidados. → Segundo candidato para la refactorización de la
+    Fase 4 (extraer la parte de idempotencia y la de validación).
+  - **La IA reportó mal el estado del repo:** dijo que `docs/` y `.claude/` estaban sin
+    seguimiento, pero ya estaban en commits anteriores. Lo verifiqué con `git status`.
+    Lección: el estado de git se comprueba, no se le cree a la IA.
+- **Aceptado / rechazado y por qué:** aceptado. El commit lo hice yo, no Claude Code.
+- **Tests y linter:** 61/61 · `ruff check .`: sin errores · cobertura 99 %.
+- **Evidencia:** `capturas/04-verde.png`
+- **Commit:** `feat(tasks): idempotencia en POST /tasks` (dd29821)
 
 ---
 
