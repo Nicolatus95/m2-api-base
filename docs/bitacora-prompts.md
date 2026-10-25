@@ -1379,3 +1379,86 @@ Solo cambió `test_tasks.py`, su cobertura (296 de 296 líneas) y el total, 520 
 
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-25 11:45:09 · Prompt
+
+```text
+<pasted_content id="d10f">
+Refactoriza tasks/service.py y tasks/repository.py: puntos 2, 9 y 6. El 3 no:
+rompe la simetría con users.repository.add; lo dejaremos documentado como deuda
+técnica.
+
+Reglas: mismo comportamiento y orden de validación, misma firma pública de
+create_task, funciones privadas con docstring, y NO modifiques ningún test. Si uno
+falla, detente y explícame por qué.
+
+Al terminar: suite, ruff check . y la sesión de Cosmic Ray desde cero (con el
+filtro). Muéstrame el antes y después de create_task y los resultados. Detente.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 11:48:30 · Respuesta
+
+Refactoricé `tasks/service.py` y `tasks/repository.py` (puntos 2, 9 y 6) sin tocar ningún test. La suite pasa, `ruff` no encuentra nada y la sesión de Cosmic Ray desde cero deja 2 supervivientes, ambos equivalentes. No hizo falta detenerme por tests fallidos.
+
+## `create_task`, antes y después
+
+La firma pública, el orden de validación y el comportamiento no cambian.
+
+**Antes:**
+```python
+def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
+    key = (idempotency_key or "").strip()
+    if key:
+        stored = repository.find_by_key(key)
+        if stored is not None:
+            stored_body, task_id = stored
+            if stored_body != data:
+                raise errors.conflict(IDEMPOTENCY_CONFLICT_MESSAGE)
+            return get_task(task_id)
+    if data.due_date < current_date():
+        raise errors.invalid_request("La fecha límite no puede estar en el pasado")
+    if data.assignee_id is not None:
+        users_service.get_user(data.assignee_id)
+    task = repository.add(**data.model_dump())
+    if key:
+        repository.remember_key(key, data, task.id)
+    return task
+```
+
+**Después:**
+```python
+def _replay(key: str, data: TaskCreate) -> Task | None:
+    """Resuelve una clave de idempotencia ya registrada.
+
+    Devuelve la tarea original si el cuerpo normalizado coincide, `None` si la clave
+    es nueva y lanza el 409 si la clave se usó con un cuerpo distinto.
+    """
+    record = repository.find_by_key(key)
+    if record is None:
+        return None
+    if record.body != data:
+        raise errors.conflict(IDEMPOTENCY_CONFLICT_MESSAGE)
+    return get_task(record.task_id)
+
+
+def _require_user(user_id: int) -> None:
+    """Falla con el 404 de `users` si el usuario no existe; no devuelve nada."""
+    users_service.get_user(user_id)
+
+
+def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
+    key = (idempotency_key or "").strip()
+    if key:
+        replayed = _replay(key, data)
+        if replayed is not None:
+ 
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\repository.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`

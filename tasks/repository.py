@@ -4,12 +4,21 @@ Guarda las tareas y el registro de claves de idempotencia. Vive aquí, y no en
 `service.py`, para que `reset()` limpie ambos a la vez entre tests.
 """
 from datetime import date, datetime, timezone
+from typing import NamedTuple
 
 from tasks.schemas import Task, TaskCreate
 
+
+class IdempotencyRecord(NamedTuple):
+    """Lo que se guarda por cada clave: el cuerpo normalizado y la tarea creada."""
+
+    body: TaskCreate
+    task_id: int
+
+
 _tasks: dict[int, Task] = {}
 _next_id: int  # el valor inicial vive solo en reset()
-_idempotency_keys: dict[str, tuple[TaskCreate, int]] = {}
+_idempotency_keys: dict[str, IdempotencyRecord] = {}
 
 
 def add(
@@ -47,13 +56,13 @@ def list_by_assignee(assignee_id: int) -> list[Task]:
     return [task for task in _tasks.values() if task.assignee_id == assignee_id]
 
 
-def find_by_key(key: str) -> tuple[TaskCreate, int] | None:
+def find_by_key(key: str) -> IdempotencyRecord | None:
     """Cuerpo normalizado e `id` de la tarea creada con esa clave, si existe."""
     return _idempotency_keys.get(key)
 
 
 def remember_key(key: str, body: TaskCreate, task_id: int) -> None:
-    _idempotency_keys[key] = (body, task_id)
+    _idempotency_keys[key] = IdempotencyRecord(body, task_id)
 
 
 def reset() -> None:

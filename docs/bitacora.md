@@ -113,6 +113,8 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Iteración 6 · unitarios e integración | 67 | 0 | 0 | 99 % (`tasks/` 100 %) | `05-suite-completa.png` |
 | Iteración 7 · mutation testing (refactor + test de ids grandes) | 68 | 0 | 0 | 99 % (`tasks/` 100 %) | `11-suite-tras-mutacion.png` |
 | Bug 2 · `due_date` solo `YYYY-MM-DD` (CA-42) | 73 | 0 | 0 | 99 % (`tasks/` 100 %) | `14-bug-verde.png` |
+| Refactorización 2 · tests | 73 | 0 | 0 | 99 % (`tasks/` 100 %) | `15-refactor-tests.png` |
+| Refactorización 3 · servicio y repositorio | 73 | 0 | 0 | 99 % (`tasks/` 100 %) | `16-refactor-produccion.png` |
 
 ### Iteraciones
 
@@ -553,6 +555,102 @@ reproducir → pedir hipótesis sin tocar código → verificar, corregir y vali
 - **Tests antes / después:** 67 en verde antes; 68 en verde después (se sumó el
   unitario del grupo 4). Los mutantes dentro de `reset()` mueren con los tests
   existentes (CA-01 exige `id == 1`).
+
+### Revisión de code smells (antes de las refactorizaciones 2 y 3)
+
+- **Modelo:** Opus, esfuerzo high. Prompt de solo lectura: archivo y líneas, nombre
+  del smell, por qué importa aquí y qué refactorización propone; ordenados por
+  impacto, separando los que vale la pena hacer de los que no.
+- **Resultado:** 9 smells a corregir y 8 que no vale la pena tocar, cada uno
+  justificado. Por ejemplo: los tests 422 casi idénticos son una convención
+  deliberada (un test por CA da trazabilidad) y los literales repetidos en los tests
+  fijan el contrato a propósito.
+- **Comparación con la revisión externa (chat de Claude):** encontró los tres puntos
+  que yo tenía anotados (`create_task` con tres responsabilidades, el
+  `monkeypatch.undo()` y el `_clock` global) y seis más. Añadió matices que no
+  teníamos: la condición `if key:` repetida en `create_task`, y que `undo()` deshace
+  todos los parches del test, no solo el reloj. Esta vez la autorrevisión funcionó
+  porque el prompt pedía una perspectiva concreta.
+- **Mis decisiones de alcance:**
+
+  | # | Smell | Decisión |
+  |---|---|---|
+  | 1 | `monkeypatch.undo()` en un test (fragile test) | Hacer (refactorización 2) |
+  | 4 | Reloj global con dos formas de acceso | Hacer, versión mínima (refactorización 2) |
+  | 5 | Imports de `tasks` repetidos dentro de los tests | Hacer (refactorización 2). La regla venía del ciclo test-first, cuando `tasks/` no existía |
+  | 7 | CA-42 y un test del repositorio en la sección equivocada | Hacer (refactorización 2) |
+  | 8 | Helpers de tests sin anotar | Hacer (refactorización 2) |
+  | 2 | `create_task` con tres responsabilidades | Hacer (refactorización 3) |
+  | 9 | `get_user` llamado solo por su efecto (lanzar 404) | Hacer (refactorización 3) |
+  | 6 | Tupla posicional en el registro de idempotencia | Hacer (refactorización 3) |
+  | 3 | `repository.add(**data.model_dump())` (data clump) | **No hacer:** rompe la simetría con `users.repository.add` y obliga a cambiar un test. Queda como deuda técnica documentada |
+
+### Refactorización 2 · Infraestructura de `tests/test_tasks.py`
+
+- **Code smells:** 1, 4, 5, 7 y 8 de la revisión.
+- **Cambio realizado** (Sonnet, esfuerzo medium):
+  - Sin `monkeypatch.undo()`: la función real se captura al cargar el módulo
+    (`REAL_CURRENT_DATE`) y el test de `current_date()` la restaura con
+    `monkeypatch.setattr`, así que ya no revierte otros parches. Claude Code descartó
+    el marcador `real_clock` que había propuesto, porque exigía tocar
+    `pyproject.toml` y el prompt limitaba el cambio a los tests.
+  - Un solo acceso al reloj: CA-13 y CA-42 reciben el parámetro `today`, como CA-29.
+  - `tasks` se importa a nivel de módulo; se quitaron 8 imports locales.
+  - CA-42 y `unix_timestamp` pasan a "Creación"; la sección de unitarios se llama
+    "Unitarios de `tasks/`".
+  - `post_task` y `task_create` anotan su tipo de retorno.
+  - El docstring del módulo y `CLAUDE.md` actualizan las reglas.
+- **Tests antes / después:** 73 passed antes y después, con los mismos nombres y
+  aserciones. `tests/test_tasks.py` baja de 303 a 296 sentencias; `ruff check .` sin
+  errores.
+- **Evidencia:** `capturas/15-refactor-tests.png`
+- **Commit:** `refactor(tests): fixture today sin undo(), imports a nivel de módulo y secciones ordenadas` (e1da43d)
+
+### Refactorización 3 · `create_task`, `_require_user` e `IdempotencyRecord`
+
+- **Code smells:** 2, 9 y 6 de la revisión.
+- **Cambio realizado** (Sonnet, esfuerzo medium; sin modificar ningún test):
+  - `_replay(key, data)`: busca la clave y devuelve la tarea original, `None` si la
+    clave es nueva, o lanza el 409. `create_task` queda con una anidación menos.
+  - `_require_user(user_id)`: nombra la intención de "fallar con 404 si el usuario
+    no existe". Lo usan `create_task` y `list_tasks`.
+  - `IdempotencyRecord(NamedTuple)` con `body` y `task_id`: el servicio usa
+    `record.body` y `record.task_id` en lugar de desempaquetar una tupla por
+    posición.
+  - Limitación reconocida por Claude Code: `create_task` mantiene dos `if key:` (al
+    inicio y al final). Quitar el segundo exigía cambiar el orden de pasos de la
+    especificación, y prefirió no hacerlo.
+
+  ```python
+  # Después
+  def create_task(data: TaskCreate, idempotency_key: str | None = None) -> Task:
+      key = (idempotency_key or "").strip()
+      if key:
+          replayed = _replay(key, data)
+          if replayed is not None:
+              return replayed
+      if data.due_date < current_date():
+          raise errors.invalid_request("La fecha límite no puede estar en el pasado")
+      if data.assignee_id is not None:
+          _require_user(data.assignee_id)
+      task = repository.add(**data.model_dump())
+      if key:
+          repository.remember_key(key, data, task.id)
+      return task
+  ```
+- **Tests antes / después:** 73 passed antes y después, sin tocar ningún test;
+  `ruff check .` sin errores; `tasks/` al 100 %.
+- **Red de seguridad extra: mutation testing tras el refactor.** Sesión de Cosmic
+  Ray desde cero: 205 mutantes (más código nuevo), 121 omitidos por el filtro, 84
+  ejecutados, **82 muertos (97,6 %)**. Los 2 sobrevivientes son el mismo caso
+  equivalente: quitar `@classmethod` en los dos validadores de `schemas.py` (el de
+  `description` y el nuevo de `due_date`). Sin equivalentes: 82 de 82. La
+  refactorización no debilitó la suite.
+- **Evidencia:** `capturas/16-refactor-produccion.png` (suite),
+  `mutacion/reporte-refactor.html` y `capturas/17-mutacion-refactor.png` (resumen de
+  Cosmic Ray: 205 mutantes, 2 sobrevivientes; el "0.98%" divide entre 205, el valor
+  real es 2 de 84).
+- **Commit:** `refactor(tasks): create_task como lista de pasos; _replay, _require_user e IdempotencyRecord`
 
 ---
 
