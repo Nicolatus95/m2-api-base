@@ -40,8 +40,10 @@ aceptación CA-xx). Sigue el mismo patrón que `users/`.
 - `title` y `description` se recortan; una `description` vacía se guarda como `null`.
   Las longitudes se miden después del recorte.
 - `priority` y `assignee_id` llevan `strict=True` (rechazan booleanos y texto).
-  `due_date` no: se acepta en modo laxo (ver "Limitaciones conocidas" de la
-  especificación).
+  `due_date` no, porque FastAPI valida el cuerpo como `dict` de Python y un `date`
+  estricto rechazaría también `"2026-10-24"`. Su formato lo exige un validador
+  previo (`mode="before"`) en `TaskCreate`, no en `TaskBase`: solo texto que cumpla
+  `re.fullmatch` con `[0-9]{4}-[0-9]{2}-[0-9]{2}` (`[0-9]`, no `\d`) (CA-42).
 - Ids ≤ 0 son datos mal formados (422, no 404): `Field(gt=0)` en `assignee_id`,
   `Path(gt=0)` en `task_id` y `Query(gt=0)` en el filtro de `GET /tasks`. Los
   parámetros de ruta y de consulta no llevan `strict`.

@@ -25,7 +25,7 @@ El recurso sigue el mismo patrón que `users/` (`routes.py`, `service.py`,
 |---------------|----------|-------------|---------------------------------------------------------------|----------------|
 | `title`       | `str`    | Sí          | Se recortan los espacios de los extremos y se guarda recortado. Después del recorte, entre 3 y 120 caracteres. Un título de solo espacios es inválido. | 422 |
 | `description` | `str`    | No          | Se recortan los espacios de los extremos; si queda vacía (`""` o solo espacios) se guarda como `null`. Después del recorte, máximo 1000 caracteres. | 422 |
-| `due_date`    | `date`   | Sí          | Formato `YYYY-MM-DD`. Hoy o posterior (ver "Fecha actual"). Modo laxo: ver "Limitaciones conocidas". | 422 |
+| `due_date`    | `date`   | Sí          | Solo texto con formato exacto `YYYY-MM-DD`: se rechazan números (timestamps Unix), texto numérico y fechas con hora. Hoy o posterior (ver "Fecha actual"). No lleva `strict=True`: FastAPI valida el cuerpo ya convertido en `dict` de Python, y en modo estricto un `date` rechaza también el texto `"2026-10-24"`. El formato lo exige un validador previo (`mode="before"`) en `TaskCreate`. | 422 |
 | `priority`    | `int`    | No          | De 1 a 5. Por defecto `3`. `strict=True`: rechaza booleanos y texto (`true`, `"5"`). | 422 |
 | `assignee_id` | `int`    | No          | Mayor que 0 (`gt=0`) y `strict=True` (rechaza booleanos y texto). Si se envía, el usuario debe existir. | 422 si es ≤ 0 o no es entero; 404 si no existe |
 
@@ -185,6 +185,7 @@ Los identificadores `CA-xx` nombran los tests. Todas las fechas relativas (`hoy`
 | CA-19 | Asignado con id no positivo            | `POST /tasks` con `assignee_id: 0` (y con `-1`)                                | 422 |
 | CA-20 | Asignado booleano                      | `POST /tasks` con `assignee_id: true`                                          | 422 (no se asigna al usuario 1) |
 | CA-21 | Fecha pasada y asignado inexistente    | `POST /tasks` con `due_date` = hoy−1 y `assignee_id: 999`                      | 422 (la fecha se evalúa primero) |
+| CA-42 | `due_date` fuera del formato `YYYY-MM-DD` | `POST /tasks` con `due_date` = timestamp Unix de hoy+7 a medianoche UTC (entero, decimal y texto numérico), `"<hoy+7>T00:00:00"` y `"<hoy+7>T00:00:00Z"` | 422 con la lista de errores de Pydantic sobre `due_date` (error de formato, no de dominio) |
 
 ### Idempotencia
 
@@ -241,10 +242,6 @@ Los identificadores `CA-xx` nombran los tests. Todas las fechas relativas (`hoy`
 - **Sin atomicidad.** Dos peticiones simultáneas con la misma clave podrían crear dos
   tareas, porque la comprobación y el registro de la clave no son una operación
   atómica. Con un único proceso y el almacén en memoria el riesgo es bajo.
-- **`due_date` acepta timestamps Unix.** No lleva `strict=True`: FastAPI valida el
-  cuerpo ya convertido en `dict` de Python, y en modo estricto podría rechazar también
-  `"2026-10-24"`. En modo laxo, Pydantic acepta además un entero como
-  `1729728000` y lo interpreta como fecha.
 - **Base de zonas del sistema.** En Linux, `zoneinfo` usa primero la base de zonas
   del sistema y solo recurre a `tzdata` si no la encuentra. Una base anterior a 2022
   aplicaría el horario de verano que México eliminó. CA-14 no se ve afectado: su
@@ -252,7 +249,8 @@ Los identificadores `CA-xx` nombran los tests. Todas las fechas relativas (`hoy`
 
 ## Plan de implementación (completado)
 
-Los siete pasos están hechos y CA-01 a CA-41 pasan.
+Los siete pasos están hechos y CA-01 a CA-42 pasan. CA-42 se añadió después, al
+corregir un defecto: `due_date` aceptaba timestamps Unix y fechas con hora.
 
 1. Ejecutar `pip install -r requirements.txt`: `tzdata` aún no está instalado en
    `.venv`, y sin él importar `tasks.service` falla y con ello toda la suite.

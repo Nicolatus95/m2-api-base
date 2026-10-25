@@ -1,16 +1,17 @@
 """Tests del recurso `tasks`.
 
-Fuente de verdad: docs/especificacion-tasks.md (criterios CA-01 a CA-41).
+Fuente de verdad: docs/especificacion-tasks.md (criterios CA-01 a CA-42).
 Mismo estilo que test_users.py, con estas diferencias:
   - el docstring de cada test lleva el criterio (CA-xx) que cubre
   - "hoy" está fijado por la fixture autouse `today`; nunca se usa `date.today()`
   - los cuerpos se arman con `valid_payload(**changes)`
   - `tasks` no se importa a nivel de módulo: se importa dentro de la fixture o del test
 
-Secciones: API (CA-01 a CA-41), unitarios de `tasks/service.py` con dependencias
+Secciones: API (CA-01 a CA-42), unitarios de `tasks/service.py` con dependencias
 simuladas e integración con `users`. Los unitarios y la integración no tienen un CA
 propio: su docstring indica los CA con los que se relacionan.
 """
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import Mock
 
@@ -561,6 +562,38 @@ def test_list_tasks_filtra_con_id_no_positivo_devuelve_422(
     response = client.get("/tasks", params={"assignee_id": assignee_id})
 
     assert response.status_code == 422
+
+
+def unix_timestamp(day: date) -> int:
+    """Segundos Unix de la medianoche UTC de `day`: el único instante que el modo
+    laxo de Pydantic convertía en fecha."""
+    return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+
+
+@pytest.mark.parametrize(
+    "make_due_date",
+    [
+        lambda day: unix_timestamp(day),
+        lambda day: float(unix_timestamp(day)),
+        lambda day: str(unix_timestamp(day)),
+        lambda day: f"{day.isoformat()}T00:00:00",
+        lambda day: f"{day.isoformat()}T00:00:00Z",
+    ],
+    ids=["entero", "decimal", "texto_numerico", "fecha_y_hora", "fecha_y_hora_utc"],
+)
+def test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422(
+    client: TestClient, make_due_date: Callable[[date], object]
+) -> None:
+    """CA-42: due_date como timestamp Unix (número o texto) o como fecha con hora."""
+    future = _clock.value + timedelta(days=7)
+
+    response = client.post("/tasks", json=valid_payload(due_date=make_due_date(future)))
+
+    assert response.status_code == 422
+    # Error de formato (lista de Pydantic sobre `due_date`), no de dominio (texto).
+    detail = response.json()["detail"]
+    assert isinstance(detail, list)
+    assert [error["loc"] for error in detail] == [["body", "due_date"]]
 
 
 # --- Unitarios de tasks/service.py (dependencias simuladas) -----------------

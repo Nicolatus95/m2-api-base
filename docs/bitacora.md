@@ -112,6 +112,7 @@ Una fila por iteración, con el comando de la convención de evidencias.
 | Iteración 5 · idempotencia (verde) | 61 | 0 | 0 | 99 % | `04-verde.png` |
 | Iteración 6 · unitarios e integración | 67 | 0 | 0 | 99 % (`tasks/` 100 %) | `05-suite-completa.png` |
 | Iteración 7 · mutation testing (refactor + test de ids grandes) | 68 | 0 | 0 | 99 % (`tasks/` 100 %) | `11-suite-tras-mutacion.png` |
+| Bug 2 · `due_date` solo `YYYY-MM-DD` (CA-42) | 73 | 0 | 0 | 99 % (`tasks/` 100 %) | `14-bug-verde.png` |
 
 ### Iteraciones
 
@@ -446,6 +447,91 @@ Una fila por iteración, con el comando de la convención de evidencias.
 - **Nota:** este bug fue de herramientas, no del código de la feature, y la IA lo
   resolvió sola dentro del prompt. No hubo un intercambio de "hipótesis antes que
   soluciones" conmigo; eso queda para el bug de la aplicación.
+
+### Bug 2 · `due_date` acepta un timestamp Unix
+
+Protocolo en tres pasos separados, para que la IA no salte directo a la solución:
+reproducir → pedir hipótesis sin tocar código → verificar, corregir y validar.
+
+- **Paso 1 · Reproducción** (Sonnet, esfuerzo medium):
+  - Test nuevo `test_create_task_due_date_como_timestamp_unix_devuelve_422` (CA-42):
+    envía `due_date` como el timestamp Unix de una fecha futura (hoy + 7 días) a
+    medianoche UTC, para que la regla de fecha pasada no interfiera.
+  - **Síntoma:** `assert 201 == 422` en `tests/test_tasks.py:576`
+    (`AssertionError`). La API crea la tarea aunque la especificación exige el
+    formato `YYYY-MM-DD`.
+  - Evidencia: `capturas/12-bug-rojo.png` (traceback completo).
+- **Paso 2 · Hipótesis de la IA** (Opus, esfuerzo high). Le di stack trace, contexto
+  y comportamiento esperado, y le pedí hipótesis sin tocar código. Propuso tres,
+  cada una con un experimento para verificarla sin cambiar producción:
+
+  | # | Hipótesis | Cómo verificarla |
+  |---|---|---|
+  | H1 (más probable) | Pydantic, en modo laxo, convierte el entero en fecha porque `due_date` no es estricto. Solo acepta timestamps exactos a medianoche UTC (el caso del test); con parte horaria daría `date_from_datetime_inexact`. | `TypeAdapter(date).validate_python(ts)` y variantes (`ts + 1`, milisegundos, `float`, `str`). |
+  | H2 | FastAPI valida el cuerpo en modo Python (ya convertido a `dict`), así que nada distingue un número JSON de un texto JSON. Es la premisa de la decisión P11: `strict=True` en modo Python rechazaría también `"2026-10-24"`. | `TypeAdapter(Annotated[date, Field(strict=True)])` en modo Python y JSON, y una app mínima con `TestClient` en un directorio temporal. |
+  | H3 (menos probable) | El test no envía lo que creemos (por ejemplo, `valid_payload` no sobrescribe `due_date`). | Imprimir el payload y el `due_date` de la respuesta. |
+
+  - **Observación de la IA:** el comportamiento esperado contradice la especificación
+    vigente, que documenta los timestamps como "limitación conocida". No es un fallo
+    de implementación sino un requisito que cambia: hay que decidir si CA-42
+    reemplaza esa limitación.
+  - **Mi evaluación:** verificar H1 (causa directa) y H2 (decide cómo se puede
+    corregir). H3 no hace falta: el experimento de H1 ya prueba que el test envía lo
+    que creemos. Sobre el requisito: CA-42 reemplaza la limitación, porque la
+    especificación se contradecía (`YYYY-MM-DD` en la tabla de campos, timestamps
+    aceptados en las limitaciones) y resuelvo a favor del formato declarado.
+- **Paso 3a · Verificación** (Opus, esfuerzo high; experimentos fuera del repo, sin
+  tocar producción; pydantic 2.14.1, fastapi 0.162.0):
+  - **H1 confirmada:** `TaskCreate` convierte `1793404800` en `2026-10-31`. Un segundo
+    después de medianoche da `date_from_datetime_inexact`. También se aceptan
+    milisegundos, decimales y, **hallazgo nuevo**, el texto `"1793404800"` y las
+    fechas con hora (`"2026-10-31T00:00:00"`, con o sin `Z`).
+  - **H2 confirmada:** con un `date` estricto, una app mínima de FastAPI rechaza
+    también `"2026-10-31"` (`date_type`), porque el cuerpo se valida como `dict` de
+    Python. `strict=True` queda descartado como fix: la premisa de P11 sigue en pie.
+  - La IA comparó cinco variantes sobre 12 valores de prueba y propuso tres fixes,
+    todos con un validador previo (`mode="before"`) en el schema:
+
+  | Opción | Qué hace | Ventaja | Desventaja |
+  |---|---|---|---|
+  | **B · texto con formato exacto** | Exige `str` y `re.fullmatch` de `AAAA-MM-DD` | Es literalmente la especificación; cierra todos los huecos de la tabla | Introduce una expresión regular |
+  | C · `date.fromisoformat` | Exige `str` y usa la biblioteca estándar | Sin regex | Desde Python 3.11 acepta `20261031` y `2026-W44-6`: contradice el formato declarado |
+  | A · solo texto | Rechaza lo que no sea `str` | Cambio mínimo | Deja pasar `"1793404800"` y las fechas con hora |
+
+  - Detalle técnico que señaló la IA: el validador debe ir en `TaskCreate` y no en
+    `TaskBase`, porque `Task` hereda de `TaskBase` y el repositorio lo construye con
+    un objeto `date`.
+- **Mi decisión:** opción B, con dos ajustes:
+  - Ampliar CA-42 con `parametrize` para que el test fije los huecos encontrados
+    (entero, decimal, texto numérico, fecha con hora), no solo el entero.
+  - **Hallazgo de la revisión externa (chat de Claude):** en Python, `\d` acepta
+    dígitos de cualquier alfabeto Unicode (por ejemplo, `٢٠٢٦`), no solo del 0 al 9.
+    La expresión regular debe usar `[0-9]` para ser exactamente `AAAA-MM-DD`.
+- **Paso 3b · Fix y validación** (Opus, esfuerzo high; lo usé sin querer, para un fix
+  así de acotado bastaba Sonnet):
+  - **Test:** CA-42 ampliado con `parametrize` a 5 casos (entero, decimal, texto
+    numérico, fecha con hora y fecha con hora UTC) y renombrado a
+    `test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422`. Además
+    verifica que el 422 sea un error de formato (lista de Pydantic sobre
+    `due_date`), no de dominio.
+  - **Fix:** validador previo (`mode="before"`) en `TaskCreate` (no en `TaskBase`)
+    que exige texto y `re.fullmatch` con `[0-9]{4}-[0-9]{2}-[0-9]{2}`; mensaje en
+    español: "La fecha límite debe tener el formato YYYY-MM-DD". Un comentario en el
+    código explica por qué `[0-9]` y no `\d`.
+  - **Documentación:** la especificación agrega CA-42, explica en la fila de
+    `due_date` por qué no lleva `strict=True` y elimina la limitación de los
+    timestamps; `CLAUDE.md` actualiza la regla.
+  - **Proceso:** Claude Code aplicó el fix sin detenerse después de ampliar el test,
+    porque mi prompt no le pedía parar. Lección: si quiero evidencia de cada fase,
+    el prompt debe pedir explícitamente la pausa.
+  - **Fase roja reconstruida:** aparté el fix con `git stash push -- tasks/schemas.py`,
+    corrí el test ampliado contra el código anterior (**5 failed**, los cinco con
+    `assert 201 == 422`) y lo regresé con `git stash pop`. Evidencia:
+    `capturas/13-bug-test-ampliado.png`.
+  - **Validación:** 73 passed (68 + 5 casos de CA-42), cobertura 99 %, `tasks/` al
+    100 %; `ruff check .` sin errores.
+  - Evidencia: `capturas/14-bug-verde.png`.
+- **Paso 3 · Fix y validación:** pendiente.
 
 <!-- Plantilla por refactorización:
 ### Refactorización N · <code smell>

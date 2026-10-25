@@ -996,3 +996,285 @@ Repetí la sesión de mutación desde cero: sobrevive un solo mutante, el equiva
 - **El filtro es más amplio que "solo equivalentes".** De los 110 omitidos, 22 sí morían antes. Son los de `routes.py:17` y `routes.py:29`, porque FastAPI evalúa esas anotacio
 
 [… respuesta recortada …]
+
+---
+
+## 2026-10-25 10:37:14 · Prompt
+
+```text
+<pasted_content id="d10f">
+Vamos a depurar un defecto. En este paso SOLO reprodúcelo; no corrijas nada.
+
+La especificación dice que due_date es una fecha en formato YYYY-MM-DD, pero
+sospecho que POST /tasks acepta un timestamp Unix (un número).
+
+1. Agrega a tests/test_tasks.py un test que envíe due_date como un número entero:
+   el timestamp Unix de una fecha FUTURA a medianoche UTC, calculado a partir de
+   la fecha fijada por `today` (para que la regla de fecha pasada no interfiera).
+   Debe esperar 422. Docstring "CA-42: due_date como timestamp Unix".
+2. Ejecuta solo ese test con el traceback completo (sin --tb=no) y muéstrame la
+   salida tal cual.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 10:37:52 · Respuesta
+
+Inserto el test tras CA-41, al final de la sección de API.
+
+Reproduje el defecto: `POST /tasks` acepta un entero como `due_date` y responde 201 en lugar de 422. No corregí nada.
+
+Agregué `test_create_task_due_date_como_timestamp_unix_devuelve_422` en `tests/test_tasks.py:566`, justo después de CA-41. Con el docstring pedido ("CA-42: due_date como timestamp Unix"), calcula el timestamp Unix de medianoche UTC de `hoy + 7 días`. Así la regla de fecha pasada no interfiere.
+
+Salida de `pytest tests/test_tasks.py -k timestamp_unix -p no:cacheprovider`, con traceback completo (sin `--tb=no`):
+
+```
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________ test_create_task_due_date_como_timestamp_unix_devuelve_422 __________
+
+client = <starlette.testclient.TestClient object at 0x0000014341CA3230>
+
+    def test_create_task_due_date_como_timestamp_unix_devuelve_422(
+        client: TestClient,
+    ) -> None:
+        """CA-42: due_date como timestamp Unix."""
+        future = _clock.value + timedelta(days=7)
+        midnight_utc = datetime(future.year, future.month, future.day, tzinfo=timezone.utc)
+        timestamp = int(midnight_utc.timestamp())
+    
+        response = client.post("/tasks", json=valid_payload(due_date=timestamp))
+    
+>       assert response.status_code == 422
+E       assert 201 == 422
+E        +  where 201 = <Response [201 Created]>.status_code
+
+tests\test_tasks.py:576: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_tasks.py::test_create_task_due_date_como_timestamp_unix_devuelve_422
+1 failed, 62 deselected in 0.89s
+```
+
+- **Causa probable (sin verificar):** `due_date` no lleva `strict=True`, a propósito. La sección "Limitaciones conocidas" de la especificación documenta que se acepta en modo laxo. El modo laxo de Pydantic convierte un entero en fecha cuando es un timestamp válido.
+-
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+
+---
+
+## 2026-10-25 10:40:38 · Prompt
+
+```text
+<pasted_content id="d10f">
+Necesito tu ayuda para diagnosticar un defecto. NO propongas una solución ni
+modifiques código todavía: primero quiero hipótesis.
+
+## Stack trace
+tests/test_tasks.py:576: AssertionError
+    response = client.post("/tasks", json=valid_payload(due_date=timestamp))
+>   assert response.status_code == 422
+E   assert 201 == 422
+E    +  where 201 = <Response [201 Created]>.status_code
+FAILED tests/test_tasks.py::test_create_task_due_date_como_timestamp_unix_devuelve_422
+
+## Contexto
+- El test envía due_date como un entero: el timestamp Unix de hoy+7 días a
+  medianoche UTC.
+- El schema está en @tasks/schemas.py; la regla de fecha pasada en
+  @tasks/service.py. La especificación es @docs/especificacion-tasks.md.
+- priority y assignee_id usan strict=True; due_date no, por una decisión previa
+  documentada en la especificación (P11).
+
+## Comportamiento esperado
+due_date solo acepta una fecha en formato YYYY-MM-DD. Un número debe dar 422.
+
+## Lo que necesito
+Dame 3 hipótesis sobre la causa, ordenadas de más a menos probable. Para cada
+una: por qué podría ser la causa y cómo verificarla sin cambiar el código de
+producción (por ejemplo, un experimento puntual en Python). No implementes
+ningún fix.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 10:41:24 · Respuesta
+
+La causa más probable es que Pydantic, en modo laxo, convierte el entero en una fecha válida. La especificación ya documenta ese comportamiento como limitación conocida. Ordeno las tres hipótesis de más a menos probable. No ejecuté ningún experimento ni toqué código; todos se pueden correr desde la raíz del proyecto con el `.venv` activo.
+
+## H1 (la más probable): Pydantic convierte el entero en fecha porque `due_date` no es estricto
+
+**Por qué podría ser la causa:** `due_date: date` (`tasks/schemas.py:17`) no lleva `strict=True`. En modo laxo, Pydantic v2 acepta un `int` o `float` como timestamp Unix: segundos, o milisegundos si el número es muy grande. Solo lo acepta si el instante cae exactamente a medianoche UTC; si tiene parte horaria, lo rechaza con `date_from_datetime_inexact`. El test usa justamente medianoche UTC de hoy+7, el único caso aceptado. La fecha resultante es futura, así que la regla de fecha pasada del servicio también la deja pasar y la respuesta es 201. La sección "Limitaciones conocidas" de la especificación describe este caso con el ejemplo `1729728000`.
+
+**Cómo verificarla:**
+```python
+from datetime import date, datetime, timedelta, timezone
+from pydantic import TypeAdapter, ValidationError, VERSION
+from tasks.schemas import TaskCreate
+
+print(VERSION)
+future = date(2026, 10, 24) + timedelta(days=7)
+ts = int(datetime(future.year, future.month, future.day, tzinfo=timezone.utc).timestamp())
+
+print(TypeAdapter(date).validate_python(ts))          # se espera date(2026, 10, 31)
+print(TaskCreate.model_validate({"title": "Revisar logs", "due_date": ts}).due_date)
+
+for value in (ts + 1, ts * 1000, float(ts), str(ts)):  # límites del modo laxo
+    try:
+        print(value, "->", TypeAdapter(date).validate_python(value))
+    except ValidationError as error:
+        print(value, "->", error.errors()[0]["type"])
+```
+- **Se confirma si:** `ts` da 2026-10-31 y `ts + 1` da `date_from_datetime_inexact`.
+- **Comprobación extra:** `TypeAdapter(Annotated[date, 
+
+[… respuesta recortada …]
+
+---
+
+## 2026-10-25 10:47:03 · Prompt
+
+```text
+<pasted_content id="d10f">
+Buen diagnóstico. Decisiones:
+
+- Verifica H1 y H2 con los experimentos que propusiste, en un script fuera del
+  repo o en un directorio temporal. No modifiques código de producción.
+- H3 no hace falta: si el experimento de H1 confirma que TaskCreate convierte el
+  entero, el test envía lo que creemos.
+- Sobre el requisito: sí, CA-42 reemplaza la limitación. La especificación se
+  contradecía (YYYY-MM-DD en la tabla de campos, timestamps aceptados en
+  limitaciones) y resuelvo a favor del formato declarado.
+
+Muéstrame la salida de cada experimento y dime qué hipótesis quedan confirmadas.
+Después propón 2 o 3 formas de corregirlo con sus ventajas y desventajas (incluye
+si cada una rechazaría también "2026-10-31T00:00:00"). Todavía no implementes.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 10:48:53 · Respuesta
+
+H1 y H2 quedan confirmadas. Además encontré que la conversión es más amplia de lo que suponía la especificación. Ejecuté los experimentos con el `.venv` del proyecto, en un directorio temporal; no modifiqué nada del repositorio.
+
+## Experimento H1: Pydantic convierte el número en fecha
+
+```
+pydantic 2.14.1
+timestamp de hoy+7 a medianoche UTC: 1793404800
+
+-- TypeAdapter(date), modo laxo --
+1793404800 -> 2026-10-31
+
+-- TaskCreate.model_validate --
+due_date -> datetime.date(2026, 10, 31)
+
+-- límites del modo laxo --
+1793404801 -> date_from_datetime_inexact
+1793404800000 -> datetime.date(2026, 10, 31)
+1793404800.0 -> datetime.date(2026, 10, 31)
+'1793404800' -> datetime.date(2026, 10, 31)
+
+-- comprobación extra: strict=True --
+1793404800 -> date_type
+```
+
+**H1 confirmada.** `TaskCreate` convierte el entero en `2026-10-31`, que es hoy+7, así que la regla de fecha pasada lo deja pasar.
+- Un segundo después de medianoche se rechaza (`date_from_datetime_inexact`).
+- Los milisegundos y los decimales también se aceptan.
+- **Hallazgo nuevo:** el texto `"1793404800"` también se convierte en fecha. La limitación documentada solo hablaba de enteros.
+
+## Experimento H2: FastAPI valida el cuerpo en modo Python
+
+```
+fastapi 0.162.0
+
+-- Pydantic: date estricto, modo Python vs modo JSON --
+python, texto  -> date_type
+json, texto    -> datetime.date(2026, 10, 31)
+json, número   -> date_type
+
+-- App mínima: ¿qué modo usa FastAPI para el cuerpo? --
+'2026-10-31' -> 422 ['date_type']
+1793404800 -> 422 ['date_type']
+```
+
+**H2 confirmada.** Con esta versión de FastAPI, un `date` estricto rechaza también la fecha válida `"2026-10-31"`, porque el cuerpo se valida como `dict` de Python. La premisa de P11 sigue siendo cierta, así que `strict=True` no sirve como arreglo.
+
+## Cómo se comporta cada opción
+
+Probé las candidatas sobre un mismo conjunto de valores; "422" significa rechazado:
+
+```
+                          actual (laxo) |      strict=True |      A: solo str |   B: str + regex | C: fromi
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\scratchpad\h1_coercion.py`
+- `C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\scratchpad\h2_fastapi_mode.py`
+- `C:\Users\NICOLA~1\AppData\Local\Temp\claude\C--Users-Nicolassg-Desktop-Next-Gen-Desarrollo-con-IA-m2-api-base\b26bd632-4d5e-4f26-b204-2c0787e6fe55\scratchpad\due_date\options.py`
+
+---
+
+## 2026-10-25 10:55:50 · Prompt
+
+```text
+<pasted_content id="d10f">
+Elijo la opción B, con dos ajustes:
+
+1. Primero el test: amplía CA-42 con pytest.mark.parametrize para cubrir el entero,
+   el decimal, el texto numérico "1793404800", "2026-10-31T00:00:00" y
+   "2026-10-31T00:00:00Z" (calcula los valores a partir de `today`). Verifica
+   también que el detail sea la lista de errores de Pydantic, como en CA-11.
+   Ejecútalo y muéstrame qué casos fallan.
+2. Después el fix: validador previo (mode="before") sobre due_date en TaskCreate,
+   no en TaskBase. Usa re.fullmatch con [0-9] en lugar de \d, porque \d acepta
+   dígitos de cualquier alfabeto Unicode.
+3. Actualiza docs/especificacion-tasks.md (CA-42, quitar la limitación de los
+   timestamps, explicar en la fila de due_date por qué no lleva strict) y la línea
+   correspondiente de CLAUDE.md.
+4. Ejecuta pytest --cov=. --cov-report=term-missing --tb=no -rN y ruff check . y
+   muéstrame el resultado.
+</pasted_content id="d10f">
+```
+
+### 2026-10-25 10:57:51 · Respuesta
+
+Todas las construcciones de `TaskCreate` reciben la fecha como texto (`valid_payload`, `past_date`). Aplico el arreglo y actualizo la documentación.
+
+Corregí el defecto con la opción B. La suite completa pasa (73 tests) y `ruff` no encuentra nada.
+
+## 1. Test primero: CA-42 ampliado
+
+`test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422` está en `tests/test_tasks.py`. Usa `parametrize` con cinco casos, calculados a partir de `today` (hoy+7): `entero`, `decimal`, `texto_numerico`, `fecha_y_hora` y `fecha_y_hora_utc`. Comprueba que el `detail` sea una lista y que su único error apunte a `["body", "due_date"]`.
+
+CA-11 en realidad no comprueba la forma del `detail`, solo el 422. Usé la comprobación de CA-12 (`isinstance(..., str)`), invertida a `list`. CA-11 sigue igual.
+
+Antes del arreglo fallaron los cinco casos, todos con 201:
+
+```
+FAILED tests/test_tasks.py::test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422[entero]
+FAILED tests/test_tasks.py::test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422[decimal]
+FAILED tests/test_tasks.py::test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422[texto_numerico]
+FAILED tests/test_tasks.py::test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422[fecha_y_hora]
+FAILED tests/test_tasks.py::test_create_task_due_date_fuera_del_formato_yyyy_mm_dd_devuelve_422[fecha_y_hora_utc]
+5 failed, 62 deselected in 0.41s
+```
+Cada uno con `assert 201 == 422` en `tests/test_tasks.py:592`.
+
+## 2. Arreglo en `tasks/schemas.py`
+
+- **Patrón:** la constante `DUE_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")`, con un comentario sobre por qué no usa `\d`.
+- **Validador:** `due_date_is_iso_text` está solo en `TaskCreate`, con `mode="before"`. Rechaza todo lo que no sea `str` o no cumpla `fullmatch`, con el mensaje "La fecha límite debe tener el formato YYYY-MM-DD". Si el texto cumple el formato, Pydantic lo convierte igual que antes.
+- **Por qué no en `TaskBase`:** el docst
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\schemas.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
