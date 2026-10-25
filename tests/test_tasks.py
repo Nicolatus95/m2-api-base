@@ -325,6 +325,10 @@ def test_idempotencia_misma_clave_y_cuerpo_distinto_devuelve_409(
 
     assert first.status_code == 201
     assert second.status_code == 409
+    assert (
+        second.json()["detail"]
+        == "La clave de idempotencia ya se usó con un cuerpo distinto"
+    )
     assert len(client.get("/tasks").json()) == 1
 
 
@@ -540,6 +544,7 @@ def test_list_tasks_filtra_por_usuario_inexistente_devuelve_404(
     response = client.get("/tasks", params={"assignee_id": 999})
 
     assert response.status_code == 404
+    assert response.json()["detail"] == "No se encontró usuario: 999"
 
 
 @pytest.mark.parametrize("assignee_id", [0, -1])

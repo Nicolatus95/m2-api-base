@@ -18,7 +18,8 @@ el proyecto corre sin infraestructura.
 
 - Las rutas declaran `response_model=` y devuelven modelos Pydantic, nunca `dict` crudos.
 - Los errores se levantan con las funciones de `core/errors.py`
-  (`not_found`, `invalid_request`, `already_exists`), no con `HTTPException` a mano.
+  (`not_found`, `invalid_request`, `already_exists`, `conflict`), no con
+  `HTTPException` a mano.
 - La ruta delega en `service.py`; la lógica y las decisiones de error viven ahí.
 - Los 404 usan el mensaje neutro "No se encontró <recurso>: <id>" (vía
   `errors.not_found`), para concordar con recursos en masculino y femenino.

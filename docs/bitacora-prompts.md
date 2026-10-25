@@ -475,3 +475,118 @@ El paso 2 del plan queda dividido en dos partes:
 
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+
+---
+
+## 2026-10-24 21:35:49 · Prompt
+
+```text
+<pasted_content id="d10f">
+Implementa el recurso tasks siguiendo el plan de @docs/especificacion-tasks.md y
+las convenciones de @CLAUDE.md. Trabaja en iteraciones cortas y DETENTE al final
+de cada una: muéstrame el resultado de pytest y ruff check . y espera mi "sigue".
+
+Iteración 0 · Ajuste de tests (antes de implementar)
+- En CA-23, verifica también que detail sea exactamente el mensaje de conflict
+  definido en la especificación.
+- En CA-40, verifica que detail sea "No se encontró usuario: 999".
+No cambies nada más de los tests.
+
+Iteración 1 · Base
+- conflict(message) en core/errors.py.
+- tasks/__init__.py, schemas.py, repository.py (con registro de claves y reset())
+  y un service.py con BUSINESS_TIMEZONE, local_date() y current_date().
+- tests/conftest.py con los imports con alias y el reset de ambos repositorios.
+Esperado: CA-14 pasa; el resto falla por 404 (aún no hay rutas).
+
+Iteración 2 · Crear y consultar sin idempotencia
+- Lógica de creación, consulta y listado en service.py; routes.py; router en main.py.
+Esperado: pasan creación y consulta; fallan los de idempotencia.
+
+Iteración 3 · Idempotencia
+Esperado: toda la suite en verde.
+
+Reglas: no modifiques los tests salvo en la Iteración 0. Si un test parece
+incorrecto, detente, explícame por qué y espera mi decisión.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 21:36:03 · Respuesta
+
+Empiezo por la Iteración 0: dos asserts en `tests/test_tasks.py`.
+
+Iteración 0 terminada: añadí los dos asserts a `tests/test_tasks.py` y no cambié nada más.
+
+- **CA-23:** además del 409, el test exige `detail == "La clave de idempotencia ya se usó con un cuerpo distinto"`, el mensaje previsto en la especificación.
+- **CA-40:** además del 404, exige `detail == "No se encontró usuario: 999"`.
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | `6 passed, 55 errors`, igual que antes porque el paquete `tasks` sigue sin existir |
+| `ruff check .` | `All checks passed!` |
+
+La Iteración 1 empieza con `pip install -r requirements.txt` (instala `tzdata`), un cambio de entorno que el plan incluye. Esperaré tu "sigue".
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`
+
+---
+
+## 2026-10-24 21:36:37 · Prompt
+
+```text
+sigue
+```
+
+### 2026-10-24 21:37:26 · Respuesta
+
+Iteración 1. Primero instalo las dependencias (`tzdata`).
+
+`tzdata` ya resuelve la zona (el aviso de pip es solo la sugerencia de actualizar pip). Ahora el código de la base.
+
+Iteración 1 terminada y el resultado es el esperado: CA-14 pasa y el resto de `tasks` falla con 404 porque aún no hay rutas.
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | `54 failed, 7 passed` |
+| `ruff check .` | `All checks passed!` |
+
+Los 7 que pasan son los 6 de `users` y CA-14. Los 54 que fallan lo hacen todos por la ausencia de rutas:
+- 24 esperaban 201 y recibieron 404.
+- 20 esperaban 422.
+- 4 esperaban 200.
+- 2 esperaban 409.
+- Los 4 restantes son el mismo fallo visto desde otro assert: 2 comprueban el `detail` y reciben "Not Found", 1 busca `id` en el cuerpo del 404 (`KeyError: 'id'`), y el último es de otra forma que no llegué a desglosar.
+
+Lo que hice:
+- **Entorno:** `pip install -r requirements.txt` ya dejaba `tzdata` resuelto. `ZoneInfo('America/Mexico_City')` carga bien.
+- **`core/errors.py`:** añadí `conflict(message)`, que devuelve 409 con el mensaje recibido. Cambié la lista de funciones de errores en "Convenciones" de `CLAUDE.md` para incluirla.
+- **`tasks/schemas.py`:**
+  - `TaskBase`, `TaskCreate` y `Task`, con `str_strip_whitespace`.
+  - `description` vacía pasa a `None`.
+  - `priority` y `assignee_id` llevan `strict=True`.
+  - `assignee_id` lleva además `gt=0`.
+  - `due_date` queda en modo laxo.
+- **`tasks/repository.py`:**
+  - Guarda tareas y claves, sin semilla.
+  - Funciones `add`, `get`, `list_all`, `list_by_assignee`, `find_by_key` y `remember_key`.
+  - `reset()` vacía todo y deja `_next_id` en 1.
+- **`tasks/service.py`:** `BUSINESS_TIMEZONE`, `local_date()` y `current_date()`. Aún no tiene lógica de negocio.
+- **`tests/conftest.py`:** imports con alias y `reset()` de los dos repositorios, antes y después de cada test.
+
+Dos notas:
+- **`tasks/__init__.py`:** está vacío, igual que el de `users`.
+- **Especificación:** su plan de implementación aún dice que `conflict` 
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\core\errors.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\__init__.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\schemas.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\repository.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tasks\service.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\conftest.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
