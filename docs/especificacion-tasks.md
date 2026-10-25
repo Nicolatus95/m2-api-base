@@ -254,9 +254,10 @@ Los identificadores `CA-xx` nombran los tests. Todas las fechas relativas (`hoy`
 
 1. Ejecutar `pip install -r requirements.txt`: `tzdata` aún no está instalado en
    `.venv`, y sin él importar `tasks.service` falla y con ello toda la suite.
-2. `core/errors.py`: añadir `conflict(message)` (409) y cambiar el mensaje de
-   `not_found` a "No se encontró <recurso>: <id>". Actualizar el assert de
-   `tests/test_users.py` que busca "no encontrado".
+2. `core/errors.py`:
+   - ✅ **Hecho:** el mensaje de `not_found` es ahora "No se encontró <recurso>: <id>"
+     y el assert de `tests/test_users.py` espera "No se encontró usuario: 999".
+   - **Pendiente:** añadir `conflict(message)` (409).
 3. Crear el paquete `tasks/` (`__init__.py`, `routes.py`, `service.py`, `schemas.py`,
    `repository.py`), con el registro de claves y `reset()` en el repositorio.
 4. Declarar `priority` y `assignee_id` con `strict=True`, `assignee_id` con

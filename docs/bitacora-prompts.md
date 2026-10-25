@@ -405,3 +405,73 @@ Noté dos cosas:
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_users.py`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\core\errors.py`
+
+---
+
+## 2026-10-24 21:18:54 · Prompt
+
+```text
+<pasted_content id="d10f">
+Primero, en docs/especificacion-tasks.md, marca como hecho el cambio de not_found
+del paso 2 del plan de implementación (queda pendiente solo conflict(message)).
+
+Después, patrón test-first: escribe SOLO tests/test_tasks.py. No crees el paquete
+tasks/ ni modifiques main.py, tests/conftest.py ni core/errors.py.
+
+Cubre CA-01 a CA-41 de @docs/especificacion-tasks.md, siguiendo su sección
+"Infraestructura de tests" y el estilo de @tests/test_users.py:
+- un test por CA con el ID en el docstring; parametrize para los CA con variantes
+- fixture autouse `today` y helper `valid_payload(**changes)` como dice la spec
+- CA-14 importa local_date dentro del test
+- no importes `tasks` a nivel de módulo
+
+Al terminar ejecuta pytest y ruff check . y muéstrame el resumen. Es esperado que
+los tests de tasks fallen o den error (el paquete aún no existe) y que los 6 de
+users sigan pasando. No implementes nada para arreglarlos.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 21:20:29 · Respuesta
+
+Primero marco el cambio de `not_found` como hecho en el plan.
+
+Ahora escribo `tests/test_tasks.py`.
+
+Necesito el resumen del conteo y confirmar que el motivo de todos los errores es el módulo que falta.
+
+Escribí `tests/test_tasks.py` con los 41 criterios y marqué el cambio de `not_found` como hecho en el plan de la especificación. Los tests de `tasks` dan error y los 6 de `users` pasan, como esperabas. No toqué `tasks/`, `main.py`, `tests/conftest.py` ni `core/errors.py`.
+
+## Resultado
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | `6 passed, 55 errors` |
+| `pytest tests/test_users.py` | 6 pasan |
+| `pytest tests/test_tasks.py` | 55 errores, todos `ModuleNotFoundError: No module named 'tasks'` |
+| `ruff check .` | `All checks passed!` |
+
+Los 55 errores son los 41 criterios expandidos por `parametrize`. Fallan en la fixture `today`, que importa `tasks.service` antes de ejecutar cada test. Ninguno falla por un motivo distinto.
+
+## Especificación
+
+El paso 2 del plan queda dividido en dos partes:
+- **Hecho:** el mensaje de `not_found` y el assert de `test_users.py`.
+- **Pendiente:** solo `conflict(message)`.
+
+## Qué hay en `tests/test_tasks.py`
+
+- **Un test por criterio, con el CA-xx en el docstring.**
+  - Usé `parametrize` en CA-03, 09, 19, 24, 32, 35 y 41.
+  - CA-14 importa `local_date` dentro del test, y `tasks` no se importa a nivel de módulo.
+- **Fixture `today`:** es autouse y sustituye `tasks.service.current_date` con `monkeypatch`.
+  - Si esa función no existe, `monkeypatch.setattr` lanza un error en vez de crear el atributo sin avisar.
+  - Devuelve un objeto `Clock` con `advance(days)`, que usa CA-29.
+- **`valid_payload(**changes)`:** calcula las fechas a partir del mismo `Clock`. También añadí dos helpers pequeños, `past_date()` y `post_task(client, payload, key=None)`, que no estaban en la especificación.
+- **Errores de dominio:** en CA-12 y CA-21 también verifico que `detail` sea un texto y no la lista de Pydantic. Así los tests exigen que la fecha pasada l
+
+[… respuesta recortada …]
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_tasks.py`

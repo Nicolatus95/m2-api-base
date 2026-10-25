@@ -8,6 +8,24 @@ Cada sección corresponde a la sección del mismo número en el formato de entre
 
 ---
 
+## Convención de evidencias
+
+Todas las capturas de tests se toman con el mismo comando, para que sean comparables
+entre sí:
+
+```powershell
+pytest --cov=. --cov-report=term-missing --tb=no -rN
+```
+
+- `--cov=. --cov-report=term-missing`: tabla de cobertura por archivo, con las líneas
+  que faltan.
+- `--tb=no -rN`: oculta los tracebacks y la lista de fallos, para que la captura
+  muestre solo el resumen.
+- Las capturas se guardan en `capturas/` con un prefijo numérico en orden
+  (`00-linea-base.png`, `01-tests-rojo.png`, …).
+
+---
+
 ## 0. Línea base
 
 - **Fecha:** 2026-10-24 · Python 3.14.6 (Windows)
@@ -111,6 +129,44 @@ Cada sección corresponde a la sección del mismo número en el formato de entre
 - **Tests y linter:** 6/6 · `ruff check .`: sin errores. Verificado también por mí en
   PowerShell.
 - **Commit:** `refactor(errors): mensaje neutro en not_found`
+
+### Iteración 2 · Tests de aceptación en rojo (test-first)
+
+- **Objetivo:** escribir `tests/test_tasks.py` con los 41 criterios antes de que exista
+  el paquete `tasks/`.
+- **Modelo:** Sonnet 5.5, esfuerzo high.
+- **Prompt:** ver `bitacora-prompts.md` (prompt posterior a las 21:10).
+- **Resultado:**
+  - 552 líneas; 41 CA → 55 casos gracias a `pytest.mark.parametrize`.
+  - Fase roja: **6 passed, 55 errors**, todos `ModuleNotFoundError: No module named
+    'tasks'` en la fixture `today`. Ningún test falla por otra razón; los de `users`
+    siguen en verde.
+  - Infraestructura: fixture autouse `today` con un objeto `Clock` que se puede avanzar
+    (CA-29), helper `valid_payload(**changes)` y dos helpers extra que no pedía la
+    especificación: `past_date()` y `post_task(client, payload, key)`.
+  - Buen detalle: en CA-12 y CA-21 verifica que `detail` sea texto y no la lista de
+    errores de Pydantic, así el test exige que la fecha pasada la valide el servicio
+    y no el schema.
+- **Revisión externa (chat de Claude, antes de implementar):**
+  - Faltaba verificar el mensaje en el 409 (CA-23) y en el 404 del filtro (CA-40): sin
+    eso, un mensaje equivocado pasaría los tests. → Se agregan al inicio de la
+    implementación.
+  - `_clock` es un objeto global del módulo que `today` reinicia en cada test. Funciona
+    mientras los tests no corran en paralelo, pero es un code smell. → Candidato para
+    la refactorización de la Fase 4.
+  - Todos los tests son de API (pasan por ruta → servicio → repositorio), salvo CA-14.
+    Faltan unit tests del servicio con `users.service` simulado (mock) y un test de
+    integración entre recursos (crear usuario con `POST /users` → asignarle tarea →
+    filtrar). → Se agregan en la Fase 3.
+  - Claude Code avisó que no pudo comprobar si el cliente de pruebas envía los headers
+    `""` y `"   "` tal cual (CA-32). → Se verá al implementar.
+- **Aceptado / rechazado y por qué:** aceptado con los ajustes de arriba.
+- **Tests y linter:** 6 passed, 55 errors (esperado) · `ruff check .`: sin errores.
+- **Cobertura en rojo:** TOTAL 51 % (337 sentencias, 166 sin ejecutar). Baja respecto
+  al 98 % porque `--cov=.` también mide `tests/test_tasks.py` (28 %): sus tests truenan
+  en la fixture antes de ejecutarse. `users/` y `core/` siguen igual que en la línea base.
+- **Evidencia:** `capturas/01-tests-rojo.png`
+- **Commit:** `test(tasks): tests de aceptación CA-01 a CA-41 (fase roja)`
 
 ---
 
