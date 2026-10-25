@@ -732,8 +732,100 @@ reproducir → pedir hipótesis sin tocar código → verificar, corregir y vali
 
 ### Qué funcionó
 
+**Test-first me dio seguridad.** Escribir los 41 criterios como tests antes de que
+existiera el código me hizo saber desde el principio qué tenía que cumplir, y creo que
+eso me ahorró mucho tiempo de debugging después. La suite pasó de 55 errores a 54
+fallos, luego a 9 y finalmente a verde, y en cada paso sabía exactamente qué faltaba.
+
+**Planear en un chat y ejecutar en la terminal.** Trabajé con dos ventanas: un chat de
+Claude para planear, pulir los prompts y revisar resultados, y Claude Code en la
+terminal de Visual Studio para ejecutar. Esto me ahorró mucho tiempo de pensar cómo
+pulir cada prompt o de leer planes largos en la consola por un cambio pequeño. En el
+módulo anterior me pasó lo contrario: le pedí un plan a Claude Code con un prompt que
+no era bueno, el plan se fue enredando y perdí unos 40 minutos antes de desecharlo.
+Aquí los prompts llegaban a la terminal ya trabajados, con alcance claro y con un punto
+donde detenerse. Además, como el chat no escribía el código, revisaba sin el sesgo del
+autor. Un efecto secundario positivo: como las dos ventanas no comparten memoria, todo
+acuerdo tenía que quedar en un archivo (`CLAUDE.md`, la especificación o esta
+bitácora), y el proyecto quedó mejor documentado por eso.
+
+**Hipótesis antes que soluciones.** En el Bug 2 no habría detectado por mi cuenta que el
+arreglo "obvio", `strict=True`, rompía también las fechas válidas: lo descartó el
+experimento de una de las hipótesis. Me pareció muy interesante ver que los modelos
+tienen pros y contras: usé Opus para la planeación y el razonamiento complicado, y
+Sonnet para implementar.
+
+**Mutation testing.** Es una herramienta muy poderosa para cubrir toda la gama de tests
+que se deben hacer. Con 100 % de cobertura todavía había tres huecos reales que de otra
+forma no habríamos detectado; el caso más claro fue la misma línea con dos mutantes,
+uno que los tests mataban y otro que sobrevivía.
+
 ### Qué no funcionó
+
+**La IA no puede ser juez y parte.** La primera autorrevisión de la especificación
+terminó con "No queda ninguna duda abierta", y una segunda revisión encontró 16
+problemas, tres críticos. La diferencia vino de pedirle que lo viera desde otro punto de
+vista ("como si fueras a escribir los tests"), que al final es una estrategia de
+prompting. Creo que esto es algo que vamos a aprender a fondo con el uso de agentes.
+
+**Lo implícito se pierde.** Claude Code reportó mal el estado de git (dijo que había
+carpetas sin seguimiento que ya estaban en commits) y, en el Bug 2, aplicó el fix sin
+detenerse porque mi prompt no le pedía parar; tuve que reconstruir la fase roja con
+`git stash`. En cambio, cuando la instrucción era explícita, la cumplió al pie de la
+letra. Mi conclusión: hay que ser muy explícito en los prompts e irlos haciendo en pasos
+pequeños, comprobables y manejables, sin dejar cosas por entendidas, porque la IA puede
+seguir de largo sobre malas suposiciones.
+
+**El entorno.** Que `mutmut` no corriera en Windows sin WSL, que el baseline de Cosmic
+Ray fallara en silencio o que el puerto 8000 estuviera bloqueado generó retrasos. Se
+compensó al ver lo que revelaban los mutantes, y creo que también es parte del proceso.
+
+**Mis propios tropiezos.** Algunos commits quedaron con el tipo `test` en lugar de
+`feat`, sobrescribí un reporte de mutación y usé Opus sin querer para un cambio pequeño.
+Aprendí a revisar siempre cómo guardo el trabajo en git, y que usar Opus para tareas
+operativas toma más tiempo y gasta más tokens de forma innecesaria.
 
 ### Qué mejoraría
 
+- **Planear el modelo y el esfuerzo junto con el prompt.** No solo qué se va a pedir,
+  sino con qué modelo y nivel de esfuerzo conviene correrlo.
+- **Tener el entorno completo desde el principio.** En este reto y en el del módulo 1 me
+  pasó lo mismo: cuando falta algo del ambiente, se corta lo que uno está haciendo y
+  retomar cuesta trabajo y tiempo.
+- **Decidir con criterio propio, aunque la IA recomiende otra cosa.** En dos ocasiones
+  no seguí la recomendación: en el mensaje "tarea no encontrado" prioricé la gramática y
+  la experiencia del usuario, porque la rúbrica lo evalúa y me parece sentido común; y
+  elegí Cosmic Ray en lugar de mutmut porque, aunque requería un poco más de
+  configuración, me daba visibilidad todo el tiempo sin tener que correr unas cosas en
+  Windows y otras en Linux.
+- **Darle su lugar a la prueba manual.** El "Undocumented" de Swagger solo apareció al
+  probar a mano. Para eso existen los ambientes UAT o las betas: aun con un equipo
+  grande de QA, los errores pueden seguir saliendo.
+- **Las evidencias.** Sacar tantas capturas fue pesado, pero me ayudó a seguir el
+  proceso paso a paso y a ordenar mis apuntes. También me sirvió compartir con el chat
+  los documentos del reto para armar un plan y ajustarlo con mis notas.
+
 ### Qué me llevo a mi trabajo
+
+- **La migración de Clipper/dBase a .NET.** Ya tenemos un esqueleto de la arquitectura
+  del sistema nuevo. Con estas herramientas podemos encontrar las pruebas que tiene que
+  pasar el código viejo y usarlas como una "camisa de fuerza" para que el código nuevo
+  salga bien.
+- **Mi equipo.** Planear en el chat y ejecutar en la terminal es mucho más amigable que
+  leer planes largos en la consola; siento que el chat es más amable para la
+  interacción que Claude Code.
+- **Mutation testing en los cálculos.** Es donde más me importa saber que los tests
+  realmente detectan errores. Para .NET existe Stryker.NET.
+- **Idempotencia.** Las operaciones duplicadas son un problema bastante común en mi
+  trabajo; yo les llamaba "duplicados" y no sabía que el concepto tenía nombre ni un
+  patrón establecido para resolverlo.
+
+**Una pregunta abierta:** en un sistema grande, ¿qué pasa con el consumo de tokens del
+chat? Lo que aprendí es que la conversación crece con cada mensaje, así que conviene
+guardar en archivos lo que debe durar y abrir un chat nuevo por fase.
+
+### En una frase
+
+Aprendí a seguir test-first y a usar mutation testing durante todo el desarrollo:
+ahorran mucho tiempo de debugging y aclaran lo que se va a hacer con más detalle, desde
+una perspectiva diferente y complementaria que muchas veces se deja de lado.
