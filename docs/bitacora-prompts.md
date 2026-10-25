@@ -359,3 +359,49 @@ Apliqué las 16 propuestas con tus dos ajustes en `docs/especificacion-tasks.md`
 
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\docs\especificacion-tasks.md`
 - `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+
+---
+
+## 2026-10-24 21:10:41 · Prompt
+
+```text
+<pasted_content id="d10f">
+Todavía no implementes tasks. Primero un ciclo test-first pequeño, solo para el
+cambio de not_found:
+
+1. En CLAUDE.md, sección "Convenciones", añade una viñeta: los 404 usan el mensaje
+   neutro "No se encontró <recurso>: <id>" (vía errors.not_found) para concordar
+   con recursos en masculino y femenino.
+2. Cambia el assert de tests/test_users.py que busca "no encontrado" para que
+   espere exactamente "No se encontró usuario: 999". Ejecuta pytest y muéstrame
+   que ese test falla.
+3. Cambia el mensaje de not_found en core/errors.py. Ejecuta pytest y ruff check .
+   y muéstrame que todo pasa.
+
+No toques nada más.
+</pasted_content id="d10f">
+```
+
+### 2026-10-24 21:11:01 · Respuesta
+
+El test falla, como se esperaba. Ahora cambio el mensaje.
+
+El ciclo test-first funcionó: el test falló antes del cambio y pasa después, con `pytest` y `ruff` en verde.
+
+1. **`CLAUDE.md`:** añadí en "Convenciones" la viñeta sobre el mensaje neutro de los 404, justo después de la que dice que la ruta delega en `service.py`.
+2. **Test en rojo:** cambié el assert de `tests/test_users.py:29` a `== "No se encontró usuario: 999"`. `pytest` dio 1 fallo y 5 pasados:
+   ```
+   AssertionError: assert 'usuario no encontrado: 999' == 'No se encontró usuario: 999'
+   FAILED tests/test_users.py::test_get_user_inexistente_devuelve_404
+   ```
+3. **Test en verde:** cambié `core/errors.py` a `f"No se encontró {resource}: {identifier}"`. `pytest` pasó los 6 tests y `ruff check .` dijo `All checks passed!`.
+
+Noté dos cosas:
+- El servicio de `users` llama a `not_found("usuario", …)` en minúscula. Por eso el mensaje queda "No se encontró usuario: 999", como querías. Con "tarea" quedará "No se encontró tarea: 999".
+- La especificación todavía lista el cambio de `not_found` como pendiente en el paso 2 del plan de implementación. Ese paso ya está hecho, salvo `conflict(message)`. No lo toqué porque pediste no cambiar nada más.
+
+**Archivos modificados:**
+
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\CLAUDE.md`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\tests\test_users.py`
+- `C:\Users\Nicolassg\Desktop\Next-Gen Desarrollo con IA\m2-api-base\core\errors.py`

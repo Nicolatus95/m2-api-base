@@ -82,16 +82,35 @@ Cada sección corresponde a la sección del mismo número en el formato de entre
 
 ### Iteraciones
 
-Una entrada por iteración:
-
+<!-- Plantilla por iteración:
 ### Iteración N · <título corto>
-
 - **Objetivo:**
 - **Prompt:** ver `bitacora-prompts.md` (hora)
 - **Resultado:**
 - **Aceptado / rechazado y por qué:**
 - **Tests y linter:**
 - **Commit:**
+-->
+
+### Iteración 1 · Mensaje neutro en `not_found`
+
+- **Objetivo:** corregir la concordancia de género de los 404 ("tarea no encontrado")
+  antes de crear el recurso `tasks`.
+- **Modelo:** Sonnet 5.5, esfuerzo medium.
+- **Prompt:** ver `bitacora-prompts.md` (21:10).
+- **Resultado:** test-first en miniatura.
+  1. Rojo: cambié el assert de `tests/test_users.py` → 1 falló y 5 pasaron
+     (`'usuario no encontrado: 999' == 'No se encontró usuario: 999'`).
+  2. Verde: una línea en `core/errors.py` (`f"No se encontró {resource}: {identifier}"`)
+     → 6 pasaron.
+  3. Viñeta nueva en "Convenciones" de `CLAUDE.md`, porque el cambio afecta a todo el
+     proyecto.
+- **Aceptado / rechazado y por qué:** aceptado tal cual; el diff son dos líneas de
+  código. Claude Code detectó que el plan de la especificación quedó desactualizado,
+  pero no lo tocó porque el prompt decía "no toques nada más": respetó el alcance.
+- **Tests y linter:** 6/6 · `ruff check .`: sin errores. Verificado también por mí en
+  PowerShell.
+- **Commit:** `refactor(errors): mensaje neutro en not_found`
 
 ---
 

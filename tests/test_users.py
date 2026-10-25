@@ -26,7 +26,7 @@ def test_get_user_inexistente_devuelve_404(client: TestClient) -> None:
     response = client.get("/users/999")
 
     assert response.status_code == 404
-    assert "no encontrado" in response.json()["detail"]
+    assert response.json()["detail"] == "No se encontró usuario: 999"
 
 
 def test_create_user_devuelve_201_y_el_usuario(client: TestClient) -> None:

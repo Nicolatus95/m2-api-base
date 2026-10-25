@@ -20,6 +20,8 @@ el proyecto corre sin infraestructura.
 - Los errores se levantan con las funciones de `core/errors.py`
   (`not_found`, `invalid_request`, `already_exists`), no con `HTTPException` a mano.
 - La ruta delega en `service.py`; la lógica y las decisiones de error viven ahí.
+- Los 404 usan el mensaje neutro "No se encontró <recurso>: <id>" (vía
+  `errors.not_found`), para concordar con recursos en masculino y femenino.
 - Identificadores en inglés y `snake_case`, sin abreviaturas. Mensajes de error en español.
 - Cada endpoint nuevo lleva su test en el archivo del recurso, con al menos un caso
   feliz y un caso de error.

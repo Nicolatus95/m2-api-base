@@ -11,7 +11,7 @@ def not_found(resource: str, identifier: object) -> HTTPException:
     """404 — el recurso pedido no existe."""
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"{resource} no encontrado: {identifier}",
+        detail=f"No se encontró {resource}: {identifier}",
     )
 
 
